@@ -1,0 +1,52 @@
+# ======================
+# Backend (C++)
+# ======================
+
+backend/build/
+
+backend/CMakeFiles/
+backend/CMakeCache.txt
+backend/cmake_install.cmake
+backend/Makefile
+backend/compile_commands.json
+
+*.o
+*.obj
+*.so
+*.a
+*.dll
+*.exe
+
+# backend executables
+backend/advisor
+backend/index-advisor
+
+# ======================
+# Frontend (React/Vite)
+# ======================
+
+index-advisor/node_modules/
+index-advisor/dist/
+
+# environment files
+index-advisor/.env
+index-advisor/.env.local
+
+# ======================
+# VS Code
+# ======================
+
+.vscode/
+
+# ======================
+# Logs
+# ======================
+
+*.log
+
+# ======================
+# OS files
+# ======================
+
+.DS_Store
+Thumbs.db
