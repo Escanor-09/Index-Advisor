@@ -1,0 +1,6 @@
+.env
+node_modules/
+backend/target/
+database/*.sql
+.DS_Store
+Index-Advisor-main.zip
