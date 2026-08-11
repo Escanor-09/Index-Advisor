@@ -1,17 +1,25 @@
-import "../css/ResultCard.css";
+import "../css/WorkloadResultCard.css";
 
-function ResultCard({
-    bestIndex,
-    originalCost,
-    bestCost,
+function WorkloadResultCard({
+    recommendedIndexes,
+    beforeCost,
+    afterCost,
     improvement,
 }) {
     return (
-        <div className="result-card">
-            <h2>Best Recommendation</h2>
+        <div className="workload-result-card">
+            <h2>Workload Summary</h2>
 
-            <div className="best-index">
-                {bestIndex}
+            <div className="recommended-indexes">
+                <h3>Top Recommended Indexes</h3>
+
+                <ul>
+                    {recommendedIndexes.map((idx, i) => (
+                        <li key={i}>
+                            {idx.index}
+                        </li>
+                    ))}
+                </ul>
             </div>
 
             <div className="metrics-grid">
@@ -22,7 +30,7 @@ function ResultCard({
                     </span>
 
                     <span className="metric-value">
-                        {originalCost}
+                        {beforeCost}
                     </span>
                 </div>
 
@@ -32,7 +40,7 @@ function ResultCard({
                     </span>
 
                     <span className="metric-value">
-                        {bestCost}
+                        {afterCost}
                     </span>
                 </div>
 
@@ -51,4 +59,4 @@ function ResultCard({
     );
 }
 
-export default ResultCard;
+export default WorkloadResultCard;

@@ -1,9 +1,8 @@
-function AnalyzeButton({
-    text,
-    onClick,
-}) {
+import "../css/AnalyzeButton.css";
+
+function AnalyzeButton({ text, onClick, }) {
     return (
-        <button onClick={onClick}>
+        <button className="analyze-button" onClick={onClick}>
             {text}
         </button>
     );

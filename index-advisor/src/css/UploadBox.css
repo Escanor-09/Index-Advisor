@@ -1,0 +1,38 @@
+.upload-box {
+    background: #ffffff;
+    padding: 40px;
+    margin: 24px 0;
+    border-radius: 12px;
+    border: 2px dashed #cbd5e1;
+    text-align: center;
+    transition: 0.2s ease;
+}
+
+.upload-box:hover {
+    border-color: #2563eb;
+}
+
+.upload-label {
+    display: inline-block;
+    padding: 14px 24px;
+    background: #2563eb;
+    color: white;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.2s ease;
+}
+
+.upload-label:hover {
+    background: #1d4ed8;
+}
+
+.upload-label input {
+    display: none;
+}
+
+.upload-box p {
+    margin-top: 12px;
+    color: #6b7280;
+    font-size: 0.9rem;
+}

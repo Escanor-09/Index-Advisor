@@ -1,0 +1,32 @@
+.single-query-page {
+    max-width: 1100px;
+    margin: 50px auto;
+    padding: 20px;
+}
+
+.query-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.query-container textarea {
+    width: 100%;
+    min-height: 250px;
+
+    padding: 16px;
+
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+
+    font-family: monospace;
+    font-size: 15px;
+
+    resize: vertical;
+
+    background: white;
+}
+
+.single-query-page button {
+    margin-top: 20px;
+}

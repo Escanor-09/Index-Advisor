@@ -1,15 +1,15 @@
 import { Link } from "react-router-dom";
-
+import "../css/Navbar.css"
 function Navbar() {
     return (
-        <nav>
-            <h2>
-                Index Advisor
-            </h2>
+        <nav className="navbar">
+            <h2 className="logo">Index Advisor</h2>
 
-            <Link to={"/"}>Home</Link>
-            <Link to={"/single-query"}>Single Query</Link>
-            <Link to="/workload">Workliad</Link>
+            <div className="nav-links">
+                <Link to="/">Home</Link>
+                <Link to="/single-query">Single Query</Link>
+                <Link to="/workload">Workload</Link>
+            </div>
         </nav>
     );
 }
