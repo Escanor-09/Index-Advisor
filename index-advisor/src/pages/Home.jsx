@@ -1,9 +1,10 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import "../css/Home.css"
 import AnalyzeButton from "../components/AnalyzeButton";
 import "../css/AnalyzeButton.css"
 function Home() {
+    const navigate = useNavigate();
     return (
         <>
             <Navbar />

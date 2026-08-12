@@ -111,8 +111,7 @@ function SingleQuery() {
                             },
                             ...result.candidates,
                         ]} />
-
-                        <QueryAnalysisCard table={result.analysis.table}
+                        <QueryAnalysisCard tables={result.analysis.tables}
                             filterColumns={result.analysis.filterColumns}
                             joinColumns={result.analysis.joinColumns}
                             orderByColumns={result.analysis.orderByColumns} />

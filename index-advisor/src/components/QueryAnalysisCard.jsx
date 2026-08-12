@@ -1,8 +1,8 @@
 import "../css/QueryAnalysisCard.css";
 
 function QueryAnalysisCard({
-    table,
-    filterColumns,
+    tables = [],
+    filterColumns = [],
     joinColumns = [],
     orderByColumns = [],
 }) {
@@ -11,17 +11,34 @@ function QueryAnalysisCard({
             <h2>Query Analysis</h2>
 
             <div className="analysis-section">
-                <h3>Table</h3>
-                <p>{table}</p>
+                <h3>Tables</h3>
+
+                {tables.length > 0 ? (
+                    <ul>
+                        {tables.map((table, idx) => (
+                            <li key={idx}>{table}</li>
+                        ))}
+                    </ul>
+                ) : (
+                    <p>None</p>
+                )}
             </div>
 
             <div className="analysis-section">
                 <h3>Filter Columns</h3>
 
                 <ul>
-                    {filterColumns.map((col, idx) => (
-                        <li key={idx}>{col}</li>
-                    ))}
+                    {filterColumns.length > 0 ? (
+                        <ul>
+                            {filterColumns.map((col, idx) => (
+                                <li key={idx}>
+                                    <strong>{col.table}</strong> → {col.column}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p>None</p>
+                    )}
                 </ul>
             </div>
 
@@ -46,9 +63,17 @@ function QueryAnalysisCard({
 
                 {orderByColumns.length > 0 ? (
                     <ul>
-                        {orderByColumns.map((col, idx) => (
-                            <li key={idx}>{col}</li>
-                        ))}
+                        {orderByColumns.length > 0 ? (
+                            <ul>
+                                {orderByColumns.map((col, idx) => (
+                                    <li key={idx}>
+                                        <strong>{col.table}</strong> → {col.column}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p>None</p>
+                        )}
                     </ul>
                 ) : (
                     <p>None</p>
