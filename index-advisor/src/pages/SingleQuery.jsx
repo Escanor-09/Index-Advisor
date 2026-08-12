@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+import axios from "axios";
 import Navbar from "../components/Navbar";
 import QueryEditor from "../components/QueryEditor";
 import AnalyzeButton from "../components/AnalyzeButton";
@@ -18,6 +18,9 @@ function SingleQuery() {
     );
 
     const [result, setResult] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [reasoning, setReasoning] = useState([]);
+    const [aiLoading, setAiLoading] = useState(false);
 
     const validateQuery = (query) => {
         const trimmed = query.trim().toUpperCase();
@@ -29,7 +32,7 @@ function SingleQuery() {
         );
     };
 
-    const handleAnalyze = () => {
+    const handleAnalyze = async () => {
         if (!validateQuery(query)) {
             alert(
                 "Only SELECT, WITH and EXPLAIN queries are allowed."
@@ -37,53 +40,39 @@ function SingleQuery() {
             return;
         }
 
-        setResult({
-            bestIndex: "(category_id, brand_id)",
+        setLoading(true);
+        setReasoning([]);
+        setAiLoading(false);
+        setResult(null);
 
-            originalCost: 1200,
+        try {
+            const response = await axios.post("http://localhost:8080/api/analyze-query", { query: query, });
+            setResult(response.data);
+            setAiLoading(true);
+            setReasoning(["Generating AI explanation...."]);
 
-            candidates: [
-                {
-                    index: "(category_id, brand_id)",
-                    cost: 120,
-                    improvement: 90,
-                },
-                {
-                    index: "(category_id, price)",
-                    cost: 180,
-                    improvement: 85,
-                },
-                {
-                    index: "(brand_id, price)",
-                    cost: 250,
-                    improvement: 79,
-                },
-                {
-                    index: "(category_id)",
-                    cost: 400,
-                    improvement: 66,
-                },
-            ],
+            axios.post("http://localhost:8080/api/generate-explanation", {
+                query: query,
+                table: response.data.analysis.table,
+                columns: response.data.analysis.filterColumns,
+                beforeCost: response.data.originalCost,
+                afterCost: response.data.bestCost,
+                improvement: response.data.improvement
+            }).then((aiRespnse) => {
+                setReasoning(aiRespnse.data.reasoning);
+                setAiLoading(false);
+            }).catch(() => {
+                setReasoning(["Failed to generate explanation."]);
+                setAiLoading(false);
+            });
+        } catch (error) {
+            console.error(error);
+            alert("Failed to analyze query");
+        }
 
-            analysis: {
-                table: "products",
-
-                filterColumns: [
-                    "category_id",
-                ],
-
-                joinColumns: [],
-
-                orderByColumns: [],
-            },
-
-            reasoning: [
-                "category_id appears in WHERE clause",
-                "brand_id increases selectivity",
-                "lowest estimated cost among candidates",
-                "90% reduction in estimated cost",
-            ],
-        });
+        finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -102,52 +91,45 @@ function SingleQuery() {
                 <AnalyzeButton
                     text="Analyze Query"
                     onClick={handleAnalyze}
+                    loading={loading}
                 />
-
                 {result && (
                     <>
+
                         <ResultCard
                             bestIndex={result.bestIndex}
                             originalCost={result.originalCost}
-                            bestCost={
-                                result.candidates[0].cost
-                            }
-                            improvement={
-                                result.candidates[0].improvement
-                            }
+                            bestCost={result.bestCost}
+                            improvement={result.improvement}
                         />
+                        <CandidateTable candidates={result.candidates} />
 
-                        <CostComparisonChart
-                            data={[
-                                {
-                                    index: "No Index",
-                                    cost: result.originalCost,
-                                },
-                                ...result.candidates,
-                            ]}
-                        />
+                        <CostComparisonChart data={[
+                            {
+                                index: "No Index",
+                                cost: result.originalCost,
+                            },
+                            ...result.candidates,
+                        ]} />
 
-                        <CandidateTable
-                            candidates={result.candidates}
-                        />
+                        <QueryAnalysisCard table={result.analysis.table}
+                            filterColumns={result.analysis.filterColumns}
+                            joinColumns={result.analysis.joinColumns}
+                            orderByColumns={result.analysis.orderByColumns} />
 
-                        <QueryAnalysisCard
-                            table={result.analysis.table}
-                            filterColumns={
-                                result.analysis.filterColumns
-                            }
-                            joinColumns={
-                                result.analysis.joinColumns
-                            }
-                            orderByColumns={
-                                result.analysis.orderByColumns
-                            }
-                        />
-
-                        <Recommendation
-                            index={result.bestIndex}
-                            reasons={result.reasoning}
-                        />
+                        {
+                            aiLoading ? (
+                                <div className="ai-loading-card">
+                                    <div className="ai-spinner"></div>
+                                    <p>Generating AI explanation...</p>
+                                </div>
+                            ) : (
+                                <Recommendation
+                                    index={result.bestIndex}
+                                    reasons={reasoning}
+                                />
+                            )
+                        }
                     </>
                 )}
             </div>

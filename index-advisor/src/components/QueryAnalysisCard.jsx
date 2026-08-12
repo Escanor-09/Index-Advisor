@@ -31,7 +31,9 @@ function QueryAnalysisCard({
                 {joinColumns.length > 0 ? (
                     <ul>
                         {joinColumns.map((col, idx) => (
-                            <li key={idx}>{col}</li>
+                            <li key={idx}>
+                                <strong>{col.table}</strong> → {col.column}
+                            </li>
                         ))}
                     </ul>
                 ) : (
