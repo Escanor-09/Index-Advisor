@@ -7,11 +7,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(PkgConfig REQUIRED)
 find_package(nlohmann_json REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 pkg_check_modules(PQXX REQUIRED libpqxx)
 
 include_directories(
     include
+    api
+    external
     ${PQXX_INCLUDE_DIRS}
     ${PROJECT_SOURCE_DIR}/libpg_query
 )
@@ -30,6 +33,9 @@ add_executable(
     src/IndexEvaluator.cpp
     src/QueryAdvisor.cpp
     src/RecommendationEngine.cpp
+    api/Server.cpp
+    src/AIExplanationService.cpp
+    src/ExistingIndexManager.cpp
 )
 
 target_link_libraries(
@@ -38,4 +44,13 @@ target_link_libraries(
     ${PQXX_LIBRARIES}
     nlohmann_json::nlohmann_json
     ${PROJECT_SOURCE_DIR}/libpg_query/libpg_query.a
+
+    OpenSSL::SSL
+    OpenSSL::Crypto
+)
+
+target_compile_definitions(
+    advisor
+    PRIVATE
+    CPPHTTPLIB_OPENSSL_SUPPORT
 )

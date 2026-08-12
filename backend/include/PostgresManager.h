@@ -18,4 +18,6 @@ public:
     std::string explainAnalyze(const std::string &query);
 
     std::string executeScalar(const std::string &query);
+
+    pqxx::connection &getConnection();
 };

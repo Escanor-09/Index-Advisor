@@ -1,5 +1,6 @@
 #include "IndexEvaluator.h"
 #include "QueryPlan.h"
+#include <iostream>
 
 IndexEvaluator::IndexEvaluator(PostgresManager &db) : db_(db) {}
 
@@ -41,26 +42,59 @@ double IndexEvaluator::calculateImprovement(double beforeCost, double afterCost)
     return beforeCost - afterCost;
 }
 
+std::string IndexEvaluator::buildHypoPGCreateSQL(const CandidateIndex &candidate)
+{
+    std::string indexDef = "CREATE INDEX ON " + candidate.tableName + "(";
+
+    for (size_t i = 0; i < candidate.columns.size(); i++)
+    {
+        indexDef += candidate.columns[i];
+
+        if (i != candidate.columns.size() - 1)
+        {
+            indexDef += ", ";
+        }
+    }
+
+    indexDef += ")";
+    return "SELECT * FROM hypopg_create_index('" + indexDef + "');";
+}
+
+std::string IndexEvaluator::buildHypoPGResetSQL()
+{
+    return "SELECT hypopg_reset();";
+}
+
 EvaluationResult IndexEvaluator::evaluate(const std::string &query, const CandidateIndex &candidate)
 {
 
-    QueryPlan beforePlan(db_.explainAnalyze(query));
+    auto start = std::chrono::steady_clock::now();
+
+    pqxx::work txn(db_.getConnection());
+
+    pqxx::result beforeResult = txn.exec("EXPLAIN (FORMAT JSON) " + query);
+
+    QueryPlan beforePlan(beforeResult[0][0].c_str());
 
     double beforeCost = beforePlan.getTotalCost();
 
-    std::string indexName = generateIndexName(candidate);
+    std::string createSQL = buildHypoPGCreateSQL(candidate);
 
-    std::string createSQL = buildCreateIndexSQL(candidate, indexName);
+    txn.exec(createSQL);
 
-    db_.execute(createSQL);
+    pqxx::result afterResult = txn.exec("EXPLAIN (FORMAT JSON) " + query);
 
-    QueryPlan afterPlan(db_.explainAnalyze(query));
+    QueryPlan afterPlan(afterResult[0][0].c_str());
 
     double afterCost = afterPlan.getTotalCost();
 
-    std::string dropSQL = buildDropIndexSQL(indexName);
+    txn.exec(buildHypoPGResetSQL());
 
-    db_.execute(dropSQL);
+    txn.commit();
+
+    auto end = std::chrono::steady_clock::now();
+
+    // std::cout << "Time : " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
 
     EvaluationResult result;
 
@@ -68,6 +102,21 @@ EvaluationResult IndexEvaluator::evaluate(const std::string &query, const Candid
     result.beforeCost = beforeCost;
     result.afterCost = afterCost;
     result.improvement = calculateImprovement(beforeCost, afterCost);
+
+    std::cout << "\nCandidate: ";
+
+    for (size_t i = 0; i < candidate.columns.size(); i++)
+    {
+        std::cout << candidate.columns[i];
+
+        if (i + 1 < candidate.columns.size())
+            std::cout << ", ";
+    }
+
+    std::cout << "\nBefore Cost: " << beforeCost
+              << "\nAfter Cost: " << afterCost
+              << "\nImprovement: " << result.improvement
+              << "\n";
 
     return result;
 }
