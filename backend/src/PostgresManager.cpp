@@ -33,31 +33,19 @@ std::string PostgresManager::explainAnalyze(const std::string &query)
 {
     pqxx::work txn(conn);
 
-    auto start = std::chrono::steady_clock::now();
+    // auto start = std::chrono::steady_clock::now();
     pqxx::result result = txn.exec("EXPLAIN (FORMAT JSON) " + query);
-    auto end = std::chrono::steady_clock::now();
-    // std::cout
-    //     << "EXPLAIN: "
-    //     << std::chrono::duration_cast<std::chrono::milliseconds>(
-    //            end - start)
-    //            .count()
-    //     << " ms\n";
+    // auto end = std::chrono::steady_clock::now();
     return result[0][0].c_str();
 }
 
 void PostgresManager::execute(const std::string &query)
 {
     pqxx::work txn(conn);
-    auto start = std::chrono::steady_clock::now();
+    // auto start = std::chrono::steady_clock::now();
     txn.exec(query);
     txn.commit();
-    auto end = std::chrono::steady_clock::now();
-    // std::cout
-    //     << "EXECUTE: "
-    //     << std::chrono::duration_cast<std::chrono::milliseconds>(
-    //            end - start)
-    //            .count()
-    //     << " ms\n";
+    // auto end = std::chrono::steady_clock::now();
 }
 
 pqxx::connection &PostgresManager::getConnection()

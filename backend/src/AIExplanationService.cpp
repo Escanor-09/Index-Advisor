@@ -12,8 +12,6 @@ AIExplanationService::AIExplanationService()
 {
     const char *key = std::getenv("GEMINI_API_KEY");
 
-    // std::cout << "ENV KEY = " << (key ? key : "NULL") << std::endl;
-
     if (key)
     {
         apiKey_ = key;
@@ -55,18 +53,11 @@ std::vector<std::string> AIExplanationService::generate(const std::string &advis
     requestBody["contents"] = json::array();
     requestBody["contents"].push_back(content);
 
-    // std::cout << "API Key: " << apiKey_ << std::endl;
-    // std::cout << "Before SSLClient" << std::endl;
-
     httplib::SSLClient client("generativelanguage.googleapis.com");
-
-    // std::cout << "After SSLClient\n";
 
     std::string path = "/v1beta/models/gemini-flash-latest:generateContent?key=" + apiKey_;
 
-    // std::cout << "Before Post" << "\n";
     auto response = client.Post(path.c_str(), requestBody.dump(), "application/json");
-    // std::cout << "After Post\n";
 
     if (!response)
     {
@@ -74,13 +65,7 @@ std::vector<std::string> AIExplanationService::generate(const std::string &advis
         return reasons;
     }
 
-    // std::cout << "HTTP Status = " << response->status << std::endl;
-    // std::cout << "BODY:\n"
-    //         << response->body << std::endl;
-
-    // std::cout << "Before parse response body\n";
     json result = json::parse(response->body);
-    // std::cout << "After parse response body\n";
 
     if (!result.contains("candidates"))
     {
@@ -90,9 +75,7 @@ std::vector<std::string> AIExplanationService::generate(const std::string &advis
         return reasons;
     }
 
-    // std::cout << "Before extracting text\n";
     std::string text = result["candidates"][0]["content"]["parts"][0]["text"];
-    // std::cout << text << std::endl;
 
     auto start = text.find('{');
     auto end = text.rfind('}');
@@ -116,6 +99,5 @@ std::vector<std::string> AIExplanationService::generate(const std::string &advis
     }
 
     auto e = std::chrono::steady_clock::now();
-    // std::cout << "GEMINI TIME: " << std::chrono::duration_cast<std::chrono::milliseconds>(e - st).count() << " ms\n";
     return reasons;
 }

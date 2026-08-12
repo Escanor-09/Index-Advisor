@@ -68,55 +68,48 @@ std::string IndexEvaluator::buildHypoPGResetSQL()
 EvaluationResult IndexEvaluator::evaluate(const std::string &query, const CandidateIndex &candidate)
 {
 
-    auto start = std::chrono::steady_clock::now();
-
-    pqxx::work txn(db_.getConnection());
-
-    pqxx::result beforeResult = txn.exec("EXPLAIN (FORMAT JSON) " + query);
-
-    QueryPlan beforePlan(beforeResult[0][0].c_str());
-
-    double beforeCost = beforePlan.getTotalCost();
-
-    std::string createSQL = buildHypoPGCreateSQL(candidate);
-
-    txn.exec(createSQL);
-
-    pqxx::result afterResult = txn.exec("EXPLAIN (FORMAT JSON) " + query);
-
-    QueryPlan afterPlan(afterResult[0][0].c_str());
-
-    double afterCost = afterPlan.getTotalCost();
-
-    txn.exec(buildHypoPGResetSQL());
-
-    txn.commit();
-
-    auto end = std::chrono::steady_clock::now();
-
-    // std::cout << "Time : " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
-
-    EvaluationResult result;
-
-    result.candidate = candidate;
-    result.beforeCost = beforeCost;
-    result.afterCost = afterCost;
-    result.improvement = calculateImprovement(beforeCost, afterCost);
-
-    std::cout << "\nCandidate: ";
-
-    for (size_t i = 0; i < candidate.columns.size(); i++)
+    try
     {
-        std::cout << candidate.columns[i];
 
-        if (i + 1 < candidate.columns.size())
-            std::cout << ", ";
+        auto start = std::chrono::steady_clock::now();
+
+        pqxx::work txn(db_.getConnection());
+
+        pqxx::result beforeResult = txn.exec("EXPLAIN (FORMAT JSON) " + query);
+
+        QueryPlan beforePlan(beforeResult[0][0].c_str());
+
+        double beforeCost = beforePlan.getTotalCost();
+
+        std::string createSQL = buildHypoPGCreateSQL(candidate);
+
+        txn.exec(createSQL);
+
+        pqxx::result afterResult = txn.exec("EXPLAIN (FORMAT JSON) " + query);
+
+        QueryPlan afterPlan(afterResult[0][0].c_str());
+
+        double afterCost = afterPlan.getTotalCost();
+
+        txn.exec(buildHypoPGResetSQL());
+
+        txn.commit();
+
+        auto end = std::chrono::steady_clock::now();
+
+        EvaluationResult result;
+
+        result.candidate = candidate;
+        result.beforeCost = beforeCost;
+        result.afterCost = afterCost;
+        result.improvement = calculateImprovement(beforeCost, afterCost);
+
+        return result;
     }
-
-    std::cout << "\nBefore Cost: " << beforeCost
-              << "\nAfter Cost: " << afterCost
-              << "\nImprovement: " << result.improvement
-              << "\n";
-
-    return result;
+    catch (const std::exception &e)
+    {
+        std::cerr << "\nEVALUATION ERROR\n"
+                  << e.what() << "\n";
+        throw;
+    }
 }

@@ -42,10 +42,19 @@ void Server::handleAnalyze(const httplib::Request &req, httplib::Response &res)
 
         json analysis;
 
-        analysis["table"] = recommendation.queryInfo.tableName;
+        analysis["tables"] = recommendation.queryInfo.tableName;
 
-        analysis["filterColumns"] =
-            recommendation.queryInfo.filterColumns;
+        analysis["filterColumns"] = json::array();
+
+        for (const auto &filterCol : recommendation.queryInfo.filterColumns)
+        {
+            json fc;
+
+            fc["table"] = filterCol.tableName;
+            fc["column"] = filterCol.columnName;
+
+            analysis["filterColumns"].push_back(fc);
+        }
 
         analysis["joinColumns"] = json::array();
 
@@ -59,8 +68,17 @@ void Server::handleAnalyze(const httplib::Request &req, httplib::Response &res)
             analysis["joinColumns"].push_back(jc);
         }
 
-        analysis["orderByColumns"] =
-            recommendation.queryInfo.orderByColumns;
+        analysis["orderByColumns"] = nlohmann::json::array();
+
+        for (const auto &orderCol : recommendation.queryInfo.orderByColumns)
+        {
+            json oc;
+
+            oc["table"] = orderCol.tableName;
+            oc["column"] = orderCol.columnName;
+
+            analysis["orderByColumns"].push_back(oc);
+        }
 
         response["analysis"] = analysis;
 
@@ -125,9 +143,19 @@ void Server::handleAnalyze(const httplib::Request &req, httplib::Response &res)
     response["candidates"] = candidates;
 
     json analysis;
-    analysis["table"] = recommendation.queryInfo.tableName;
+    analysis["tables"] = recommendation.queryInfo.tables;
 
-    analysis["filterColumns"] = recommendation.queryInfo.filterColumns;
+    analysis["filterColumns"] = nlohmann::json::array();
+
+    for (const auto &filterCol : recommendation.queryInfo.filterColumns)
+    {
+        json fc;
+
+        fc["table"] = filterCol.tableName;
+        fc["column"] = filterCol.columnName;
+
+        analysis["filterColumns"].push_back(fc);
+    }
 
     analysis["joinColumns"] = json::array();
 
@@ -141,7 +169,17 @@ void Server::handleAnalyze(const httplib::Request &req, httplib::Response &res)
         analysis["joinColumns"].push_back(jc);
     }
 
-    analysis["orderByColumns"] = recommendation.queryInfo.orderByColumns;
+    analysis["orderByColumns"] = nlohmann::json::array();
+
+    for (const auto &orderCol : recommendation.queryInfo.orderByColumns)
+    {
+        json oc;
+
+        oc["table"] = orderCol.tableName;
+        oc["column"] = orderCol.columnName;
+
+        analysis["orderByColumns"].push_back(oc);
+    }
 
     response["analysis"] = analysis;
 
@@ -152,7 +190,6 @@ void Server::handleAnalyze(const httplib::Request &req, httplib::Response &res)
 
 void Server::handleGenerateExplanation(const httplib::Request &req, httplib::Response &res)
 {
-    std::cout << "GENERATE EXPLANATION HIT" << std::endl;
     json request = json::parse(req.body);
 
     AIExplanationService aiService;
