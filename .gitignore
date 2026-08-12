@@ -20,6 +20,7 @@ backend/compile_commands.json
 # backend executables
 backend/advisor
 backend/index-advisor
+backend/node_modules/
 
 # ======================
 # Frontend (React/Vite)
