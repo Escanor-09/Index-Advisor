@@ -50,3 +50,15 @@ index-advisor/.env.local
 
 .DS_Store
 Thumbs.dbnode_modules/
+
+# libpg_query build artifacts
+backend/libpg_query/build/
+backend/libpg_query/**/*.o
+
+# coverage
+*.gcda
+*.gcno
+
+# temporary files
+*.swp
+*~
