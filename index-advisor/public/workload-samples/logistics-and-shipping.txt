@@ -1,0 +1,68 @@
+-- Theme: Logistics and Shipping
+-- Queries a logistics/delivery-routing dashboard would run: geographic
+-- segmentation (country/state/city), postal-code lookups, and shipping
+-- destination views joined against order status. Format matches
+-- workload/queries.sql exactly (WorkloadReader-compatible): "--" comment
+-- lines are stripped, statements split on ";".
+
+SELECT * FROM shipping_addresses WHERE country = 'USA';
+
+SELECT * FROM shipping_addresses WHERE country = 'India';
+
+SELECT * FROM shipping_addresses WHERE country = 'Singapore';
+
+SELECT * FROM shipping_addresses WHERE country = 'UAE';
+
+SELECT * FROM shipping_addresses WHERE country = 'Canada';
+
+SELECT * FROM shipping_addresses WHERE country = 'UK';
+
+SELECT * FROM shipping_addresses WHERE state = 'Maharashtra';
+
+SELECT * FROM shipping_addresses WHERE state = 'Delhi';
+
+SELECT * FROM shipping_addresses WHERE city = 'Mumbai';
+
+SELECT * FROM shipping_addresses WHERE city = 'Chennai';
+
+SELECT * FROM shipping_addresses WHERE postal_code = '400001';
+
+SELECT * FROM shipping_addresses WHERE country = 'India' AND state = 'Maharashtra';
+
+SELECT * FROM shipping_addresses WHERE country IN ('India', 'UAE', 'Singapore');
+
+SELECT * FROM shipping_addresses WHERE (country = 'USA' OR country = 'Canada') AND state = 'New York';
+
+SELECT * FROM shipping_addresses WHERE country = 'USA' OR country = 'UK';
+
+SELECT * FROM orders WHERE shipping_city = 'Bengaluru';
+
+SELECT * FROM orders WHERE shipping_city = 'Hyderabad';
+
+SELECT * FROM orders WHERE shipping_city = 'Kolkata';
+
+SELECT * FROM orders WHERE shipping_city = 'Singapore' AND status = 'shipped';
+
+SELECT * FROM orders WHERE shipping_city IN ('Mumbai', 'Delhi', 'Bengaluru');
+
+SELECT * FROM orders o JOIN shipping_addresses s ON o.id = s.order_id WHERE s.country = 'India';
+
+SELECT * FROM orders o JOIN shipping_addresses s ON o.id = s.order_id WHERE o.status = 'shipped' AND s.country = 'USA';
+
+SELECT * FROM shipping_addresses s JOIN customers c ON s.customer_id = c.id WHERE s.country = 'UAE';
+
+SELECT * FROM shipping_addresses ORDER BY country;
+
+SELECT * FROM shipping_addresses WHERE country = 'India' ORDER BY state;
+
+SELECT * FROM orders WHERE shipping_city = 'London' ORDER BY created_at DESC;
+
+SELECT * FROM shipping_addresses;
+
+SELECT * FROM shipping_addresses WHERE customer_id = 500;
+
+SELECT * FROM orders WHERE shipping_city = 'Toronto';
+
+SELECT * FROM orders WHERE shipping_city = 'Jaipur' AND status = 'delivered';
+
+SELECT * FROM orders WHERE shipping_city = 'Lucknow';

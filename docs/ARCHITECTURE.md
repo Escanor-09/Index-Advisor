@@ -165,6 +165,57 @@ Decided to fix `order_items`' artificial 1:1-with-`orders` ratio and add skewed 
 
 **Local before shared:** the same regeneration was validated against the local `index_advisor` sandbox first — full integrity re-check, all 42 JUnit tests, full CLI demo — before being applied to the shared Supabase `ecom` database. This mirrors Decision #6's reasoning (the local/Supabase split exists specifically so risky operations have a safe place to run first) extended to the data-generation layer, not just to `IndexEvaluator`'s DDL. The truncate-and-regenerate step against Supabase was also treated as consequential enough to require explicit confirmation before executing, not assumed to be pre-authorized by "the user asked for this feature" — a destructive operation against shared infrastructure warrants a distinct confirmation from the feature decision that motivated it.
 
+### 22. A teammate's parallel C++ backend — ported ideas natively, not called as a microservice
+A teammate had independently built a second backend for the same problem (C++, `libpg_query`, HypoPG-only evaluation, `cpp-httplib`) on the repo's `main` branch, with a React frontend built against its exact HTTP contract. Decided by reading both codebases in full before judging: not a strict win for either side. His code had four genuine strengths this one lacked (ORDER BY-aware candidates, existing-index awareness, prefix-domination pruning, AI-generated explanations) and a more robust parser (`libpg_query` is the actual Postgres grammar, not a third-party reimplementation). This codebase had the more rigorous *engine* — real measured execution time instead of a planner cost estimate, a workload-level advisor his code doesn't have at all, and safety/concurrency/test hardening earned from real bugs found and fixed here.
+
+Considered three shapes for combining them: (a) swap to his backend outright — inherits his real defects (thread-unsafe single shared connection under his multi-threaded server, no injection defense on dynamic DDL, no tests, hardcoded public credentials); (b) a true cross-language hybrid, where his C++ process is modified to expose a parse-only endpoint and this backend calls it over HTTP for candidate discovery before evaluating everything itself; (c) port his four genuine feature gaps natively into Java and keep this engine as the sole live system. Chose (c). Option (b) requires standing up and operating a second live service, in a second language, for something as small as candidate generation — a permanent two-process dependency to save what turned out to be a few hundred lines of well-understood, already-read logic. His code isn't discarded by this choice — it stays intact in the repo and git history; the value of what he built (the algorithms, not the binary) is what actually carried forward.
+
+### 23. `ExistingIndexManager` — controlled string parsing of `indexdef`, not a general SQL parser
+Discovering what indexes already exist reads `pg_indexes.indexdef` (e.g. `"CREATE INDEX idx ON public.orders USING btree (customer_id, created_at)"`) and extracts the table name and column list via bounded string search (`indexOf("public.")`, `indexOf(" USING")`, last matching parens) rather than a real SQL parser. Deliberately narrow, not naive: Postgres always schema-qualifies the table name in `indexdef` output regardless of `search_path`, and every index this project itself ever creates (`IndexEvaluator.evaluate()`) is a plain column list — never a functional index, partial index, or expression index — so the assumptions this parsing relies on are guaranteed by this codebase's own DDL-generation code, not just "probably true in practice." Coverage is a leading-prefix match (`isPrefix(candidate.columns, existing.columns)`), matching real b-tree semantics: an index on `(a, b)` can serve a query filtering on just `a`, but not one filtering on just `b` — a subset check would be wrong here in a way a prefix check isn't.
+
+### 24. `RecommendationEngine.pruneDominated()` — domination is prefix-based, not just "fewer columns"
+A candidate is dropped only if some *other* candidate on the same table has columns that are a leading prefix of its columns *and* an equal-or-better measured improvement. Prefix, not "any subset," for the same b-tree reason as Decision #23 — a `(status, category_id)` composite doesn't make a `(category_id)` single-column candidate redundant, since Postgres can't use the composite to serve a query that filters only on `category_id`. Runs before the existing `MIN_IMPROVEMENT_PERCENT` filter, not after — a dominated candidate that still clears the 10% bar (e.g. a 3-column composite at 92% when its 1-column prefix already measures 92%) would otherwise still surface as a spurious extra recommendation, adding real write/storage cost for measured zero incremental benefit.
+
+### 25. `AiExplanationService` — best-effort by design, `java.net.http.HttpClient` over a new dependency
+Calls Gemini to turn an already-measured recommendation into short natural-language prose. Deliberately outside the trust boundary of the actual recommendation: every failure mode (missing API key, network failure, timeout, malformed response, rate limit) is caught by one broad `catch (Exception e)` and turned into a clear fallback string, never an exception that could make `/generate-explanation` look like the core measurement failed. This is the one place in the codebase a broad catch is the right call — the whole point of the class is graceful degradation of a non-critical enrichment layer, not a boundary where swallowing a real bug would be dangerous. Used Java's built-in `java.net.http.HttpClient` (available since Java 11) plus Jackson (already present via `spring-boot-starter-web`) rather than adding a new HTTP client dependency — no new capability was actually needed.
+
+### 26. `AnalyzeResponse` surfaces real measured milliseconds, not a cost estimate — and lives in `web`, not `recommendation`
+The HTTP response DTO for `/analyze` is a new type in `advisor.web`, built by `AnalyzeResponse.from(QueryAdvisor.SingleQueryAnalysis)` from `QueryAdvisor.analyzeDetailed()`'s full result (parsed query + every evaluated candidate + the filtered recommendations) — not an extension of the `Recommendation` domain record, which stays focused on what it's used for elsewhere (`Main.java`'s CLI output, workload aggregation) and doesn't need raw before/after timings cluttering it. `originalCost`/`bestCost`/candidate `cost` fields are real measured execution time in milliseconds (`EvaluationResult.beforeExecutionTime`/`afterExecutionTime`), deliberately not the planner's cost estimate that field naming in the original reference frontend implied — surfacing an estimate under a label that reads as measured fact would undersell the one thing that actually distinguishes this engine from the alternative considered in Decision #22. Frontend labels (`ResultCard`, `CandidateTable`, `CostComparisonChart`) were updated to say "Time (ms)" for the same reason: the UI shouldn't claim to show something it isn't.
+
+### 27. `WorkloadAnalyzeResponse` reuses `Recommendation.affectedQueries()` as the "helped" filter, rather than re-deriving the threshold
+Same shape of problem as Decision #26 (the web layer needs real numbers `Recommendation` doesn't carry), same solution pattern (`WorkloadQueryAdvisor.analyzeDetailed()` exposes the raw `List<WorkloadEvaluationResult>`, a new `advisor.web` DTO builds the response) — but with one more wrinkle: a candidate's `WorkloadEvaluationResult.queryEvaluations()` includes *every* query it was evaluated against, including ones that didn't clear `WorkloadRecommendationEngine`'s `MIN_QUERY_IMPROVEMENT_PERCENT` bar. Averaging cost across all of them would let a barely-positive or negative result quietly drag down the reported number for an index that's actually a strong, clean win everywhere it counts. Rather than reimplementing that 10% threshold a second time in the web layer (two independent definitions of "helped" that could drift apart), `WorkloadAnalyzeResponse.from()` filters `queryEvaluations` down to exactly the SQL strings already present in `Recommendation.affectedQueries()` — the engine's own decision, reused as the source of truth, not re-derived.
+
+`coverage` is deliberately `affectedQueries().size() / totalWorkloadQueries` (a fraction of the *whole* workload passed in), not a fraction of the candidate's own applicable-query subset — the latter would make every recommended index look close to 100% "coverage" almost by construction, since a candidate is only generated from columns some query already filters on.
+
+### 28. Frontend query-source UI: three modes converge into one editable list, not three separate submit paths
+`WorkloadOptimization.jsx`'s preset dropdown, free-text textarea, and quick-add chips all write into the same `queries` state array rather than each having its own "analyze" action — picking a preset doesn't preclude then typing a few more by hand, or removing ones you don't want. This was a deliberate simplification over building three parallel submission flows: one `handleAnalyze()`, one visible "cart" the user can edit before committing, regardless of how each query got there. The preset parser (`parseWorkloadText()`) is a direct JS port of `WorkloadReader.readQueries()` — same two rules, strip `--`-prefixed lines then split on `;` — so a preset file behaves identically whether it's read by the backend directly or fetched and parsed by the browser.
+
+Adding to the list is deliberately append-only, not deduped — a repeated click of the same quick-add chip adds another copy, which is the intended fast path for building a large custom workload (e.g. toward 100 queries) from a small fixed set of chips. Safe with React's index-based list `key`/removal, so duplicate values in the array never cause a rendering or removal ambiguity.
+
+### 29. `WorkloadHypoScreener` — a session-reuse overload added to `HypoIndexEvaluator`, not a rewrite
+Wiring HypoPG into the live pipeline meant calling `HypoIndexEvaluator.evaluate()` potentially hundreds of times in one screening pass (candidates × applicable queries) — the existing single-call overload opens and closes its own pooled connection every time, which would itself become a real cost at that volume, undermining the point of screening being cheap. Rather than rewriting the class, added a second `evaluate(candidate, sql, ConnectionSession)` overload that reuses a caller-provided session, plus a new `openSession()` accessor — the original `evaluate(candidate, sql)` now just delegates to it. `Main.java`'s existing demo usage (one-off, single calls) needed zero changes; `WorkloadHypoScreener` opens one session and reuses it across its whole screening loop.
+
+Screening promotes a candidate the moment HypoPG predicts it clears the same 10% threshold a real result needs to clear to ever be recommended (`WorkloadRecommendationEngine.MIN_QUERY_IMPROVEMENT_PERCENT`) — short-circuiting on the first qualifying query, since screening only needs a yes/no answer, not the full per-query picture `WorkloadIndexEvaluator` computes afterward for whatever gets promoted.
+
+**The honest result, measured not assumed:** `SCALABILITY_BENCHMARK.md` shows a real but modest ~1.2x average speedup, ranging from a 10% *slowdown* to 46%, correlating with how much screening actually filters out — not with workload size. A workload of near-uniformly high-value candidates (point lookups on FK/PK-adjacent columns) pays the HypoPG round-trip cost for almost every candidate and then still pays the real-DDL cost for nearly all of them anyway. This was kept in as the honest finding, not tuned away or hidden behind a rounder-sounding number — the same measurement discipline the rest of this project already runs on.
+
+### 30. `IndexSetBudget` — a second stopping condition, not a replacement for the marginal-score bar
+`WorkloadRecommendationEngine.chooseIndexSet()` gained a `(results, budget)` overload rather than changing its existing signature's behavior — the no-arg overload now just calls it with `IndexSetBudget.UNLIMITED`, so every existing caller and test is byte-for-byte unaffected. The budget check (`chosen.size() >= maxIndexCount`, then cumulative storage vs. `maxStorageBytes`) runs immediately after the existing marginal-score check, inside the same greedy loop — deliberately not a separate post-processing pass over an already-chosen list, since a budget that's already been exceeded by then can't un-choose anything cleanly.
+
+Doesn't hunt for a smaller candidate that might still fit once the greedy-best one doesn't — stops there, the same way the marginal-score check already stops rather than searching for a lesser candidate that still clears it. A disclosed simplification: the "always take the single best, stop the instant it's disqualified" invariant now holds for every stopping reason, not just some of them, at the cost of occasionally leaving budget unused that a smaller candidate later in the list could have fit into.
+
+### 31. `QueryPlan.describeChange()` — computed once near the source data, not re-derived at each presentation layer
+The nested-`observedEffect` bug existed because the information needed to fix it (the full before/after node-type sequence) was available in `IndexEvaluator.evaluate()`, where both `QueryPlan` objects are still in scope, but was discarded before reaching `RecommendationEngine`/`WorkloadRecommendationEngine`, which independently built a shallow `beforeNodeType -> afterNodeType` string each — the same shallow logic duplicated in two unrelated classes. The fix adds one new `EvaluationResult.observedEffect` field, computed once via `QueryPlan.describeChange(before.getAllNodeTypes(), after.getAllNodeTypes())` at the point of measurement, with both downstream classes now just reading it. This is the more correct fix than patching each call site's string-building independently — it removes the actual root cause (a single fact computed in two places) rather than aligning two copies of it.
+
+`describeChange()` itself: identical sequences → "no plan change"; differing root → simple root-to-root (unchanged behavior for the common single-table case, where the root already *is* the whole plan); same root but a differing nested position → that position's change, labeled "(nested under `<root>`)"; same root, all shared positions equal, but differing tree sizes → a shape-changed message. Verified against the exact real query that originally exposed the bug, not just synthetic test fixtures.
+
+### 32. `ApiLimits` — a shared constants class, checked before real work starts, not a request-shape change
+Query-count/SQL-length validation (`WorkloadQueryAdvisor.validateWorkload()`, `QueryAdvisor.validateSql()`) and candidate-count validation (`WorkloadQueryAdvisor.validateCandidateCount()`) are separate checks at separate points in the pipeline, not one upfront gate — because they bound different, sequentially-incurred costs. Query count and SQL length are checkable the instant a request arrives, before `WorkloadAdvisor`'s profiling step runs a real `EXPLAIN ANALYZE` per query; candidate count isn't knowable until *after* candidates are generated from that profiling output, but still needs checking before the genuinely expensive phase (HypoPG screening, then real DDL evaluation) starts. Two gates, not one, because a single upfront check couldn't see the second cost yet.
+
+All four validation methods are package-private, not private — the same pattern `IndexEvaluator.computeImprovement()` already established, specifically so they're directly unit-testable without constructing a `PostgresManager`. Existing `IllegalArgumentException` + `AdvisorController`'s already-wired `@ExceptionHandler` meant zero new controller code was needed — oversized requests already map to a clean 400, the same path `SqlParser`'s non-SELECT rejection and `IndexEvaluator`'s unknown-column rejection already use.
+
+Deliberately doesn't cover wall-clock timeouts on a compliant-sized request, or rate-limiting — both real architectural additions (async MVC request handling, a rate-limit dependency) beyond what "reject oversized input fast" requires. Recorded as a disclosed next step (`CURRENT_PROGRESS.md`), not silently folded into this pass's scope.
+
 ---
 
 ## Data Structures Reference
@@ -176,10 +227,11 @@ Every record and its fields, with the reasoning behind its shape.
 record ParsedQuery(
     String tableName,
     List<TableColumn> qualifiedFilterColumns,
-    List<JoinClause> joins
+    List<JoinClause> joins,
+    List<TableColumn> qualifiedOrderByColumns
 )
 ```
-`filterColumns()` (a *derived* method, not a stored component) filters `qualifiedFilterColumns` down to just `tableName`'s columns, deduplicated and sorted alphabetically — preserving exactly what this type returned before JOIN support (Decision #20), so every pre-JOIN caller kept working unchanged. Sorting makes the composite candidate `CandidateGenerator` builds deterministic regardless of predicate order in the original SQL. `ParsedQuery.singleTable(table, columns)` is a factory for the common single-table case, used throughout the test suite and any caller that doesn't need to know `TableColumn`/`JoinClause` exist.
+`filterColumns()` (a *derived* method, not a stored component) filters `qualifiedFilterColumns` down to just `tableName`'s columns, deduplicated and sorted alphabetically — preserving exactly what this type returned before JOIN support (Decision #20), so every pre-JOIN caller kept working unchanged. Sorting makes the composite candidate `CandidateGenerator` builds deterministic regardless of predicate order in the original SQL. `ParsedQuery.singleTable(table, columns)` is a factory for the common single-table case, used throughout the test suite and any caller that doesn't need to know `TableColumn`/`JoinClause` exist (it passes `List.of()` for both `joins` and `qualifiedOrderByColumns`). `qualifiedOrderByColumns` follows `qualifiedFilterColumns`'s exact shape — table-attributed, alias-resolved the same way — added so `CandidateGenerator` can propose sort-avoidance indexes (Decision #22's port from the C++ backend).
 
 ### `advisor.parsing.TableColumn`
 ```java
@@ -200,20 +252,27 @@ Wraps a parsed `JsonNode` tree (`root` = full EXPLAIN response, `planNode` = the
 ```java
 record CandidateIndex(String tableName, List<String> columns)
 ```
-Plus `toDdlColumnList()`, `appliesTo(ParsedQuery)` (Decision #8, extended by Decision #20 to also match single-column candidates against either side of a `JoinClause`, not just `ParsedQuery.qualifiedFilterColumns()`), custom `toString()` (`table(col1, col2)`). Structural `equals`/`hashCode` are load-bearing for `CandidateGenerator.generateForWorkload()`'s deduplication.
+Plus `toDdlColumnList()`, `appliesTo(ParsedQuery)` (Decision #8, extended by Decision #20 to also match single-column candidates against either side of a `JoinClause`, and extended again this round to also match against `ParsedQuery.qualifiedOrderByColumns()` — without that, a pure sort-avoidance candidate would never be judged applicable to the very query that motivated it, silently breaking `WorkloadIndexEvaluator`), custom `toString()` (`table(col1, col2)`). Structural `equals`/`hashCode` are load-bearing for `CandidateGenerator.generateForWorkload()`'s deduplication.
+
+### `advisor.candidates.ExistingIndex`
+```java
+record ExistingIndex(String tableName, List<String> columns)
+```
+One real index, as discovered from `pg_indexes` by `ExistingIndexManager` (Decision #23) — deliberately the same `(tableName, columns)` shape as `CandidateIndex`, since the whole point of this type is to be compared against a `CandidateIndex` via a prefix check, not to carry any information a real index has that a candidate doesn't (index name, access method, etc. are parsed out of `indexdef` but never kept).
 
 ### `advisor.evaluation.EvaluationResult` — single-query scope
 ```java
 record EvaluationResult(
     CandidateIndex candidate,
     String beforeNodeType, String afterNodeType,
+    String observedEffect,
     double beforeCost, double afterCost,
     double beforeExecutionTime, double afterExecutionTime,
     double improvementPercent,
     long indexSizeBytes
 )
 ```
-Both estimated cost *and* real execution time kept deliberately: cost is the planner's stable estimate; execution time is the real, noisier outcome. Keeping both lets a reader sanity-check whether the planner's expectation and reality agree — which is exactly how the cache-warming bug was first spotted (a positive `improvementPercent` next to an unchanged `nodeType`). `improvementPercent` computed once, in `IndexEvaluator.computeImprovement()`, including the Decision #15 clamp. `indexSizeBytes` is measured via `pg_relation_size()` while the experimental index still exists (between `CREATE` and `DROP`) — a real number, not an estimate.
+Both estimated cost *and* real execution time kept deliberately: cost is the planner's stable estimate; execution time is the real, noisier outcome. Keeping both lets a reader sanity-check whether the planner's expectation and reality agree — which is exactly how the cache-warming bug was first spotted (a positive `improvementPercent` next to an unchanged `nodeType`). `improvementPercent` computed once, in `IndexEvaluator.computeImprovement()`, including the Decision #15 clamp. `indexSizeBytes` is measured via `pg_relation_size()` while the experimental index still exists (between `CREATE` and `DROP`) — a real number, not an estimate. `observedEffect` (Decision #31) is the full-plan-shape diff (`QueryPlan.describeChange()`), computed once alongside `improvementPercent` rather than re-derived from `beforeNodeType`/`afterNodeType` downstream — those two fields alone can't distinguish "nothing changed" from "root just didn't move while a nested node did."
 
 ### `advisor.evaluation.HypoEvaluationResult`
 ```java
@@ -250,6 +309,12 @@ record WorkloadEvaluationResult(CandidateIndex candidate, List<QueryEvaluation> 
 ```
 Raw measurement — `queryEvaluations` includes every applicable query regardless of outcome. `workloadScore` (sum of `improvementPercent`, negatives included) is a quick-glance signal only; the actual greedy algorithm recomputes its own marginal score per iteration, since "already covered" state changes across iterations.
 
+### `advisor.workload.IndexSetBudget` (Decision #30)
+```java
+record IndexSetBudget(long maxStorageBytes, int maxIndexCount)
+```
+`UNLIMITED` (`Long.MAX_VALUE`/`Integer.MAX_VALUE`) plus `storageBytes(n)`/`indexCount(n)` factories for the common single-dimension cases. Sentinel max values chosen over `Optional` fields specifically so `WorkloadRecommendationEngine`'s budget checks are unconditional numeric comparisons at every call site — no null/empty-check branching needed just because a caller didn't set one dimension.
+
 ### `advisor.recommendation.Recommendation`
 ```java
 record Recommendation(
@@ -267,3 +332,31 @@ The explainability-focused output — deliberately not `{candidate, bestResult}`
 
 ### `advisor.database.PostgresManager.ConnectionSession` (nested class, not a record)
 Not a data holder — a narrow-purpose class wrapping one pinned physical `Connection` with `executeScalar`/`executeUpdate` methods scoped to it, plus `close()` to release it back to the pool. Exists solely so `HypoIndexEvaluator` can run a sequence of statements that must all see each other's session-local HypoPG state (Decision #18) — every other database interaction in this codebase uses `PostgresManager`'s ordinary per-call-pooled methods instead, since ordinary queries/DDL are real, persisted state visible from any connection.
+
+### `advisor.QueryAdvisor.SingleQueryAnalysis` (nested record)
+```java
+record SingleQueryAnalysis(
+    ParsedQuery parsedQuery,
+    List<EvaluationResult> allResults,
+    List<Recommendation> recommendations
+)
+```
+Returned by the new `QueryAdvisor.analyzeDetailed(sql)`; the pre-existing `analyze(sql) -> List<Recommendation>` now just calls it and returns `.recommendations()`, so every caller that only ever needed the filtered list (`Main.java`, the existing test suite) needed zero changes. Added because `AnalyzeResponse` (below) needs the *full* evaluated-candidate list and the parsed query to render a candidate table and a query-analysis breakdown — information `analyze()`'s return type never carried, by design, since `Recommendation` is deliberately a "decision," not a "measurement" (see the `EvaluationResult` vs. `Recommendation` split, `INTERVIEW_NOTES.md`).
+
+### `advisor.web.AnalyzeResponse` (Decision #26)
+```java
+record AnalyzeResponse(
+    String bestIndex, double originalCost, double bestCost, double improvement,
+    List<CandidateView> candidates, QueryAnalysisView analysis
+)
+// + nested: CandidateView(index, cost, improvement), ColumnView(table, column),
+//           QueryAnalysisView(tables, filterColumns, joinColumns, orderByColumns)
+```
+The HTTP-facing shape for `/analyze`, built by the static factory `AnalyzeResponse.from(SingleQueryAnalysis)` rather than being a `@RequestBody`/`@ResponseBody`-annotated version of an existing domain type — keeps the web layer's presentation concerns (a single "best" pick, a full ranked candidate table, milliseconds instead of the domain's mixed cost/time fields) out of `advisor.recommendation`, which has its own, different callers (`Main.java`'s CLI report, workload aggregation) that don't need any of this reshaping.
+
+### `advisor.web.GenerateExplanationRequest` / `GenerateExplanationResponse`
+```java
+record GenerateExplanationRequest(String query, String bestIndex, double improvementPercent)
+record GenerateExplanationResponse(List<String> reasoning)
+```
+Deliberately minimal — just enough context for `AiExplanationService`'s prompt. The original C++ contract's request also sent table/columns split out separately (and, in one code path, a field name — `table`, singular — that didn't match what its own frontend actually read from the analyze response); collapsing to a single `bestIndex` string removed that inconsistency rather than porting it forward.

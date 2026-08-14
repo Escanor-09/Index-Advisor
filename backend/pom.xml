@@ -19,6 +19,8 @@
     <properties>
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Default entry point for `mvn exec:java`; override per-run with -Dexec.mainClass=advisor.WorkloadBenchmark etc. -->
+        <exec.mainClass>advisor.Main</exec.mainClass>
     </properties>
 
     <dependencies>
@@ -57,7 +59,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.4.1</version>
                 <configuration>
-                    <mainClass>advisor.Main</mainClass>
+                    <mainClass>${exec.mainClass}</mainClass>
                 </configuration>
             </plugin>
         </plugins>

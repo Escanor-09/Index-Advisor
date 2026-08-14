@@ -1,0 +1,67 @@
+-- Theme: Customer Support Lookups
+-- Queries a support agent's "look up this order/customer" tool would run:
+-- point lookups by ID, IN-lists for batch lookups, and a customer's full
+-- order/payment/shipping history. High-selectivity, ID-driven — a
+-- deliberately different query shape than the browsing-style themes.
+-- Format matches workload/queries.sql exactly (WorkloadReader-compatible):
+-- "--" comment lines are stripped, statements split on ";".
+
+SELECT * FROM orders WHERE id = 1;
+
+SELECT * FROM orders WHERE id = 500;
+
+SELECT * FROM orders WHERE id = 12345;
+
+SELECT * FROM customers WHERE id = 42;
+
+SELECT * FROM customers WHERE id = 9999;
+
+SELECT * FROM products WHERE id = 100;
+
+SELECT * FROM order_items WHERE order_id = 500;
+
+SELECT * FROM payments WHERE order_id = 500;
+
+SELECT * FROM shipping_addresses WHERE order_id = 500;
+
+SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.id = 500;
+
+SELECT * FROM orders o JOIN payments p ON o.id = p.order_id WHERE o.id = 500;
+
+SELECT * FROM orders o JOIN shipping_addresses s ON o.id = s.order_id WHERE o.id = 500;
+
+SELECT * FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE oi.order_id = 500;
+
+SELECT * FROM orders WHERE customer_id = 42 ORDER BY created_at DESC;
+
+SELECT * FROM payments WHERE customer_id = 42 ORDER BY created_at DESC;
+
+SELECT * FROM shipping_addresses WHERE customer_id = 42;
+
+SELECT * FROM orders WHERE customer_id = 42 AND status = 'pending';
+
+SELECT * FROM orders WHERE status = 'cancelled' AND customer_id = 42;
+
+SELECT * FROM payments WHERE order_id = 500 AND status = 'failed';
+
+SELECT * FROM customers WHERE email = 'test.user@example.com';
+
+SELECT * FROM orders WHERE id = 500 OR id = 501 OR id = 502;
+
+SELECT * FROM orders WHERE id IN (100, 200, 300, 400, 500);
+
+SELECT * FROM order_items WHERE order_id IN (500, 501, 502);
+
+SELECT * FROM payments WHERE order_id IN (500, 501, 502);
+
+SELECT * FROM customers WHERE id BETWEEN 1 AND 100;
+
+SELECT * FROM orders WHERE customer_id = 42 AND created_at > '2025-01-01';
+
+SELECT * FROM shipping_addresses WHERE customer_id = 42 AND order_id = 500;
+
+SELECT * FROM orders WHERE updated_at > '2026-08-01';
+
+SELECT * FROM payments WHERE status = 'failed' AND customer_id = 42;
+
+SELECT * FROM order_items WHERE product_id = 100 AND quantity > 1;

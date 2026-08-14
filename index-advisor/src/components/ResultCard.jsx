@@ -18,7 +18,7 @@ function ResultCard({
 
                 <div className="metric-box">
                     <span className="metric-label">
-                        Original Cost
+                        Original Time (ms)
                     </span>
 
                     <span className="metric-value">
@@ -28,7 +28,7 @@ function ResultCard({
 
                 <div className="metric-box">
                     <span className="metric-label">
-                        Optimized Cost
+                        Optimized Time (ms)
                     </span>
 
                     <span className="metric-value">

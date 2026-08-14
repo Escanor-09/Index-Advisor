@@ -86,7 +86,24 @@ public class HypoIndexEvaluator {
         ).stream().collect(Collectors.toCollection(HashSet::new));
     }
 
+    /** Opens and closes its own session — fine for a single one-off call (see Main.java's demo usage). */
     public HypoEvaluationResult evaluate(CandidateIndex candidate, String sql) {
+        try (ConnectionSession session = db.openSession()) {
+            return evaluate(candidate, sql, session);
+        }
+    }
+
+    /**
+     * Reuses a caller-provided session instead of opening a new pooled
+     * connection per call — the overload a batch screening pass (many
+     * candidates x many queries in a tight loop) should use, since opening
+     * and closing hundreds of connections would itself become a real cost
+     * this class exists specifically to avoid. Every statement still runs
+     * on the one session, and hypopg_reset() still runs after every
+     * candidate, so behavior is identical to the single-call overload —
+     * only the connection lifecycle differs.
+     */
+    public HypoEvaluationResult evaluate(CandidateIndex candidate, String sql, ConnectionSession session) {
         String table = candidate.tableName().toLowerCase();
 
         assertKnownSchema(candidate, table);
@@ -97,35 +114,38 @@ public class HypoIndexEvaluator {
             .map(HypoIndexEvaluator::quoteIdentifier)
             .collect(Collectors.joining(", "));
 
-        try (ConnectionSession session = db.openSession()) {
-            QueryPlan before = new QueryPlan(session.executeScalar("EXPLAIN (FORMAT JSON) " + sql));
+        QueryPlan before = new QueryPlan(session.executeScalar("EXPLAIN (FORMAT JSON) " + sql));
 
-            String createIndexSql = "CREATE INDEX ON " + quotedTable + " (" + quotedColumns + ")";
-            session.executeScalar(
-                "SELECT indexname FROM hypopg_create_index('" + createIndexSql.replace("'", "''") + "');"
-            );
+        String createIndexSql = "CREATE INDEX ON " + quotedTable + " (" + quotedColumns + ")";
+        session.executeScalar(
+            "SELECT indexname FROM hypopg_create_index('" + createIndexSql.replace("'", "''") + "');"
+        );
 
-            QueryPlan after;
+        QueryPlan after;
 
-            try {
-                after = new QueryPlan(session.executeScalar("EXPLAIN (FORMAT JSON) " + sql));
-            } finally {
-                session.executeScalar("SELECT hypopg_reset();");
-            }
-
-            double improvement = before.getTotalCost() == 0
-                ? 0.0
-                : 100.0 * (before.getTotalCost() - after.getTotalCost()) / before.getTotalCost();
-
-            return new HypoEvaluationResult(
-                candidate,
-                before.getNodeType(),
-                after.getNodeType(),
-                before.getTotalCost(),
-                after.getTotalCost(),
-                improvement
-            );
+        try {
+            after = new QueryPlan(session.executeScalar("EXPLAIN (FORMAT JSON) " + sql));
+        } finally {
+            session.executeScalar("SELECT hypopg_reset();");
         }
+
+        double improvement = before.getTotalCost() == 0
+            ? 0.0
+            : 100.0 * (before.getTotalCost() - after.getTotalCost()) / before.getTotalCost();
+
+        return new HypoEvaluationResult(
+            candidate,
+            before.getNodeType(),
+            after.getNodeType(),
+            before.getTotalCost(),
+            after.getTotalCost(),
+            improvement
+        );
+    }
+
+    /** Exposes a session for batch callers (WorkloadHypoScreener) so the whole screening pass shares one connection. */
+    public ConnectionSession openSession() {
+        return db.openSession();
     }
 
     private void assertKnownSchema(CandidateIndex candidate, String lowercaseTable) {

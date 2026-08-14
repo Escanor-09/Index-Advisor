@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import advisor.parsing.JoinClause;
 import advisor.parsing.ParsedQuery;
+import advisor.parsing.TableColumn;
 
 class CandidateIndexTest {
 
@@ -56,7 +57,8 @@ class CandidateIndexTest {
         ParsedQuery query = new ParsedQuery(
             "orders",
             List.of(),
-            List.of(new JoinClause("orders", "customer_id", "customers", "id"))
+            List.of(new JoinClause("orders", "customer_id", "customers", "id")),
+            List.of()
         );
 
         assertThat(candidate.appliesTo(query)).isTrue();
@@ -68,7 +70,8 @@ class CandidateIndexTest {
         ParsedQuery query = new ParsedQuery(
             "orders",
             List.of(),
-            List.of(new JoinClause("orders", "customer_id", "customers", "id"))
+            List.of(new JoinClause("orders", "customer_id", "customers", "id")),
+            List.of()
         );
 
         assertThat(candidate.appliesTo(query)).isTrue();
@@ -82,9 +85,34 @@ class CandidateIndexTest {
         ParsedQuery query = new ParsedQuery(
             "orders",
             List.of(),
-            List.of(new JoinClause("orders", "customer_id", "customers", "id"))
+            List.of(new JoinClause("orders", "customer_id", "customers", "id")),
+            List.of()
         );
 
         assertThat(composite.appliesTo(query)).isFalse();
+    }
+
+    @Test
+    void appliesTo_orderByOnlyColumn_true() {
+        // Regression: a pure sort-avoidance candidate (no matching WHERE filter)
+        // must still apply to the query that motivated it, otherwise
+        // WorkloadIndexEvaluator would silently never evaluate it.
+        CandidateIndex candidate = new CandidateIndex("orders", List.of("order_date"));
+        ParsedQuery query = new ParsedQuery("orders", List.of(), List.of(), List.of(new TableColumn("orders", "order_date")));
+
+        assertThat(candidate.appliesTo(query)).isTrue();
+    }
+
+    @Test
+    void appliesTo_filterPlusOrderByComposite_true() {
+        CandidateIndex composite = new CandidateIndex("orders", List.of("customer_id", "order_date"));
+        ParsedQuery query = new ParsedQuery(
+            "orders",
+            List.of(new TableColumn("orders", "customer_id")),
+            List.of(),
+            List.of(new TableColumn("orders", "order_date"))
+        );
+
+        assertThat(composite.appliesTo(query)).isTrue();
     }
 }

@@ -122,11 +122,13 @@ public class IndexEvaluator {
         }
 
         double improvement = computeImprovement(before, after);
+        String observedEffect = QueryPlan.describeChange(before.getAllNodeTypes(), after.getAllNodeTypes());
 
         return new EvaluationResult(
             candidate,
             before.getNodeType(),
             after.getNodeType(),
+            observedEffect,
             before.getTotalCost(),
             after.getTotalCost(),
             before.getExecutionTime(),

@@ -19,6 +19,7 @@ class RecommendationEngineTest {
         return new EvaluationResult(
             new CandidateIndex(table, columns),
             "Seq Scan", afterNodeType,
+            "Seq Scan -> " + afterNodeType,
             400.0, 10.0,
             1.0, 0.1,
             improvementPercent,
@@ -71,5 +72,44 @@ class RecommendationEngineTest {
     private static String tierFor(double improvementPercent) {
         List<EvaluationResult> results = List.of(result("t", List.of("c"), improvementPercent));
         return RecommendationEngine.recommend(results, SQL).get(0).impact();
+    }
+
+    @Test
+    void compositeNoBetterThanItsPrefix_prefixWins_compositeDropped() {
+        // (category_id) alone already gets 92%; the wider (category_id, status)
+        // composite gets no more than that — pure extra cost, should be pruned.
+        List<EvaluationResult> results = List.of(
+            result("products", List.of("category_id"), 92.0),
+            result("products", List.of("category_id", "status"), 92.0)
+        );
+
+        List<Recommendation> recommendations = RecommendationEngine.recommend(results, SQL);
+
+        assertThat(recommendations).hasSize(1);
+        assertThat(recommendations.get(0).candidate().columns()).containsExactly("category_id");
+    }
+
+    @Test
+    void compositeBeatsItsPrefix_bothSurvive() {
+        List<EvaluationResult> results = List.of(
+            result("products", List.of("category_id"), 92.0),
+            result("products", List.of("category_id", "status"), 96.2)
+        );
+
+        List<Recommendation> recommendations = RecommendationEngine.recommend(results, SQL);
+
+        assertThat(recommendations).hasSize(2);
+    }
+
+    @Test
+    void sameColumnsDifferentTables_noCrossTableDomination() {
+        List<EvaluationResult> results = List.of(
+            result("products", List.of("id"), 92.0),
+            result("orders", List.of("id"), 40.0)
+        );
+
+        List<Recommendation> recommendations = RecommendationEngine.recommend(results, SQL);
+
+        assertThat(recommendations).hasSize(2);
     }
 }

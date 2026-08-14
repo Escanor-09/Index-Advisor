@@ -23,7 +23,11 @@ class WorkloadRecommendationEngineTest {
     private static final String Q4 = "SELECT * FROM products WHERE category_id = 25 AND status = 'active';";
 
     private static EvaluationResult evalResult(CandidateIndex candidate, double improvement, String afterType) {
-        return new EvaluationResult(candidate, "Seq Scan", afterType, 400.0, 10.0, 1.0, 0.1, improvement, 8192L);
+        return new EvaluationResult(candidate, "Seq Scan", afterType, "Seq Scan -> " + afterType, 400.0, 10.0, 1.0, 0.1, improvement, 8192L);
+    }
+
+    private static EvaluationResult evalResultWithSize(CandidateIndex candidate, double improvement, long indexSizeBytes) {
+        return new EvaluationResult(candidate, "Seq Scan", "Index Scan", "Seq Scan -> Index Scan", 400.0, 10.0, 1.0, 0.1, improvement, indexSizeBytes);
     }
 
     @Test
@@ -108,5 +112,91 @@ class WorkloadRecommendationEngineTest {
     @Test
     void emptyInput_emptyOutput() {
         assertThat(WorkloadRecommendationEngine.chooseIndexSet(List.of())).isEmpty();
+    }
+
+    @Test
+    void unlimitedBudget_noArgOverload_and_explicitUnlimited_produceIdenticalResults() {
+        CandidateIndex categoryId = new CandidateIndex("products", List.of("category_id"));
+        CandidateIndex composite = new CandidateIndex("products", List.of("category_id", "status"));
+
+        List<WorkloadEvaluationResult> results = List.of(
+            new WorkloadEvaluationResult(categoryId, List.of(new QueryEvaluation(Q1, evalResult(categoryId, 92.0, "Bitmap Heap Scan"))), 92.0),
+            new WorkloadEvaluationResult(composite, List.of(new QueryEvaluation(Q4, evalResult(composite, 96.2, "Index Scan"))), 96.2)
+        );
+
+        List<Recommendation> noArg = WorkloadRecommendationEngine.chooseIndexSet(results);
+        List<Recommendation> explicitUnlimited = WorkloadRecommendationEngine.chooseIndexSet(results, IndexSetBudget.UNLIMITED);
+
+        assertThat(noArg).isEqualTo(explicitUnlimited);
+        assertThat(noArg).hasSize(2);
+    }
+
+    @Test
+    void indexCountBudget_stopsAtMaxCount_evenThoughMoreCandidatesWouldClearTheBar() {
+        CandidateIndex a = new CandidateIndex("orders", List.of("customer_id"));
+        CandidateIndex b = new CandidateIndex("payments", List.of("order_id"));
+        CandidateIndex c = new CandidateIndex("order_items", List.of("product_id"));
+
+        List<WorkloadEvaluationResult> results = List.of(
+            new WorkloadEvaluationResult(a, List.of(new QueryEvaluation("Qa", evalResult(a, 95.0, "Index Scan"))), 95.0),
+            new WorkloadEvaluationResult(b, List.of(new QueryEvaluation("Qb", evalResult(b, 90.0, "Index Scan"))), 90.0),
+            new WorkloadEvaluationResult(c, List.of(new QueryEvaluation("Qc", evalResult(c, 85.0, "Index Scan"))), 85.0)
+        );
+
+        List<Recommendation> chosen = WorkloadRecommendationEngine.chooseIndexSet(results, IndexSetBudget.indexCount(2));
+
+        assertThat(chosen).hasSize(2);
+        // Greedy picks best-marginal-score first — 95% then 90% — not just input order.
+        assertThat(chosen.get(0).candidate()).isEqualTo(a);
+        assertThat(chosen.get(1).candidate()).isEqualTo(b);
+    }
+
+    @Test
+    void storageBudget_stopsBeforeExceedingIt() {
+        CandidateIndex a = new CandidateIndex("orders", List.of("customer_id"));
+        CandidateIndex b = new CandidateIndex("payments", List.of("order_id"));
+
+        List<WorkloadEvaluationResult> results = List.of(
+            new WorkloadEvaluationResult(a, List.of(new QueryEvaluation("Qa", evalResultWithSize(a, 95.0, 6000L))), 95.0),
+            new WorkloadEvaluationResult(b, List.of(new QueryEvaluation("Qb", evalResultWithSize(b, 90.0, 6000L))), 90.0)
+        );
+
+        // Room for exactly one 6000-byte index, not both (12000 total).
+        List<Recommendation> chosen = WorkloadRecommendationEngine.chooseIndexSet(results, IndexSetBudget.storageBytes(10_000L));
+
+        assertThat(chosen).hasSize(1);
+        assertThat(chosen.get(0).candidate()).isEqualTo(a); // higher marginal score, picked first
+    }
+
+    @Test
+    void storageBudget_exactBoundaryFit_candidateIncludedNotExcluded() {
+        CandidateIndex a = new CandidateIndex("orders", List.of("customer_id"));
+
+        List<WorkloadEvaluationResult> results = List.of(
+            new WorkloadEvaluationResult(a, List.of(new QueryEvaluation("Qa", evalResultWithSize(a, 95.0, 10_000L))), 95.0)
+        );
+
+        List<Recommendation> chosen = WorkloadRecommendationEngine.chooseIndexSet(results, IndexSetBudget.storageBytes(10_000L));
+
+        assertThat(chosen).hasSize(1); // budget == exact size: fits, not an off-by-one exclusion
+    }
+
+    @Test
+    void storageBudget_accumulatesAcrossMultipleChosenIndexes() {
+        CandidateIndex a = new CandidateIndex("orders", List.of("customer_id"));
+        CandidateIndex b = new CandidateIndex("payments", List.of("order_id"));
+        CandidateIndex c = new CandidateIndex("order_items", List.of("product_id"));
+
+        List<WorkloadEvaluationResult> results = List.of(
+            new WorkloadEvaluationResult(a, List.of(new QueryEvaluation("Qa", evalResultWithSize(a, 95.0, 4000L))), 95.0),
+            new WorkloadEvaluationResult(b, List.of(new QueryEvaluation("Qb", evalResultWithSize(b, 90.0, 4000L))), 90.0),
+            new WorkloadEvaluationResult(c, List.of(new QueryEvaluation("Qc", evalResultWithSize(c, 85.0, 4000L))), 85.0)
+        );
+
+        // First two (4000 + 4000 = 8000) fit within 9000; the third would push to 12000, over budget.
+        List<Recommendation> chosen = WorkloadRecommendationEngine.chooseIndexSet(results, IndexSetBudget.storageBytes(9_000L));
+
+        assertThat(chosen).hasSize(2);
+        assertThat(chosen).extracting(Recommendation::candidate).containsExactly(a, b);
     }
 }

@@ -78,4 +78,42 @@ public class QueryPlan {
             }
         }
     }
+
+    /**
+     * Describes what actually changed between two full plan-shape sequences
+     * (see getAllNodeTypes()) — not just the root, which is what
+     * Recommendation.observedEffect showed before this method existed. Real
+     * bug this fixes: for a join query the root is the join STRATEGY, which
+     * can legitimately stay identical while a nested child scan changes
+     * (Seq Scan -> Index Scan); showing only "Nested Loop -> Nested Loop"
+     * in that case is technically accurate about the root and misleading
+     * about what the index actually did.
+     *
+     * Root-changed and no-change are both still handled as a single
+     * sentence, matching the old, simpler behavior exactly for the common
+     * single-table case (root IS the whole plan there, so this always takes
+     * the "root changed" branch when there's any change at all).
+     */
+    public static String describeChange(List<String> beforeTypes, List<String> afterTypes) {
+        if (beforeTypes.equals(afterTypes)) {
+            return "No plan change (" + beforeTypes.get(0) + ")";
+        }
+
+        if (!beforeTypes.get(0).equals(afterTypes.get(0))) {
+            return beforeTypes.get(0) + " -> " + afterTypes.get(0);
+        }
+
+        int sharedLength = Math.min(beforeTypes.size(), afterTypes.size());
+
+        for (int i = 1; i < sharedLength; i++) {
+            if (!beforeTypes.get(i).equals(afterTypes.get(i))) {
+                return beforeTypes.get(i) + " -> " + afterTypes.get(i) + " (nested under " + beforeTypes.get(0) + ")";
+            }
+        }
+
+        // Root and every shared position matched, but the trees differ in size —
+        // a node was added or removed somewhere without changing any shared node's type.
+        return beforeTypes.get(0) + " -> " + afterTypes.get(0)
+            + " (plan shape changed: " + beforeTypes.size() + " -> " + afterTypes.size() + " nodes)";
+    }
 }

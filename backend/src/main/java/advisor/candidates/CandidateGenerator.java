@@ -52,6 +52,35 @@ public class CandidateGenerator {
             candidates.add(new CandidateIndex(join.rightTable(), List.of(join.rightColumn())));
         }
 
+        Map<String, List<String>> orderByColumnsByTable = query.qualifiedOrderByColumns().stream()
+            .collect(Collectors.groupingBy(
+                TableColumn::table,
+                LinkedHashMap::new,
+                Collectors.mapping(TableColumn::column, Collectors.toList())
+            ));
+
+        for (Map.Entry<String, List<String>> entry : orderByColumnsByTable.entrySet()) {
+            String table = entry.getKey();
+            List<String> orderByColumns = entry.getValue().stream().distinct().sorted().toList();
+            List<String> filterColumns = filterColumnsByTable.getOrDefault(table, List.of());
+
+            for (String orderByColumn : orderByColumns) {
+                // A single-column sort-avoidance candidate — only worth proposing if this
+                // column isn't already covered by a filter-column candidate above.
+                if (!filterColumns.contains(orderByColumn)) {
+                    candidates.add(new CandidateIndex(table, List.of(orderByColumn)));
+                }
+
+                // Leading filter column + trailing sort column: lets Postgres use one index
+                // to both satisfy the WHERE predicate and avoid a separate sort step.
+                for (String filterColumn : filterColumns) {
+                    if (!filterColumn.equals(orderByColumn)) {
+                        candidates.add(new CandidateIndex(table, List.of(filterColumn, orderByColumn)));
+                    }
+                }
+            }
+        }
+
         return new ArrayList<>(candidates);
     }
 

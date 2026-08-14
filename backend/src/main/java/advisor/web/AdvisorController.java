@@ -1,7 +1,5 @@
 package advisor.web;
 
-import java.util.List;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -11,14 +9,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 import advisor.QueryAdvisor;
 import advisor.WorkloadQueryAdvisor;
+import advisor.ai.AiExplanationService;
 import advisor.database.PostgresManager;
-import advisor.recommendation.Recommendation;
 
 @RestController
 public class AdvisorController {
 
     private final QueryAdvisor queryAdvisor;
     private final WorkloadQueryAdvisor workloadQueryAdvisor;
+    private final AiExplanationService aiExplanationService;
 
     // Built once, as singleton fields, when Spring creates this controller bean at startup —
     // so IndexEvaluator's database-safety check and schema-allowlist load also happen once,
@@ -26,16 +25,26 @@ public class AdvisorController {
     public AdvisorController(PostgresManager db) {
         this.queryAdvisor = new QueryAdvisor(db);
         this.workloadQueryAdvisor = new WorkloadQueryAdvisor(db);
+        this.aiExplanationService = new AiExplanationService();
     }
 
     @PostMapping("/analyze")
-    public List<Recommendation> analyze(@RequestBody AnalyzeRequest request) {
-        return queryAdvisor.analyze(request.query());
+    public AnalyzeResponse analyze(@RequestBody AnalyzeRequest request) {
+        return AnalyzeResponse.from(queryAdvisor.analyzeDetailed(request.query()));
     }
 
     @PostMapping("/analyze-workload")
-    public List<Recommendation> analyzeWorkload(@RequestBody AnalyzeWorkloadRequest request) {
-        return workloadQueryAdvisor.analyzeWorkload(request.queries());
+    public WorkloadAnalyzeResponse analyzeWorkload(@RequestBody AnalyzeWorkloadRequest request) {
+        return WorkloadAnalyzeResponse.from(workloadQueryAdvisor.analyzeDetailed(request.queries()));
+    }
+
+    @PostMapping("/generate-explanation")
+    public GenerateExplanationResponse generateExplanation(@RequestBody GenerateExplanationRequest request) {
+        String context = "Query: " + request.query()
+            + "\nRecommended index: " + request.bestIndex()
+            + "\nMeasured improvement: " + request.improvementPercent() + "%";
+
+        return new GenerateExplanationResponse(aiExplanationService.generate(context));
     }
 
     // SqlParser rejects non-SELECT / multi-table / unsupported queries this way, and

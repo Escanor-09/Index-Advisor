@@ -64,7 +64,8 @@ class CandidateGeneratorTest {
         ParsedQuery query = new ParsedQuery(
             "orders",
             List.of(),
-            List.of(new JoinClause("orders", "customer_id", "customers", "id"))
+            List.of(new JoinClause("orders", "customer_id", "customers", "id")),
+            List.of()
         );
 
         List<CandidateIndex> candidates = CandidateGenerator.generate(query);
@@ -81,7 +82,8 @@ class CandidateGeneratorTest {
         ParsedQuery query = new ParsedQuery(
             "orders",
             List.of(new TableColumn("customers", "status")),
-            List.of(new JoinClause("orders", "customer_id", "customers", "id"))
+            List.of(new JoinClause("orders", "customer_id", "customers", "id")),
+            List.of()
         );
 
         List<CandidateIndex> candidates = CandidateGenerator.generate(query);
@@ -99,7 +101,8 @@ class CandidateGeneratorTest {
         ParsedQuery query = new ParsedQuery(
             "orders",
             List.of(new TableColumn("orders", "customer_id")),
-            List.of(new JoinClause("orders", "customer_id", "customers", "id"))
+            List.of(new JoinClause("orders", "customer_id", "customers", "id")),
+            List.of()
         );
 
         List<CandidateIndex> candidates = CandidateGenerator.generate(query);
@@ -107,6 +110,56 @@ class CandidateGeneratorTest {
         assertThat(candidates).containsExactly(
             new CandidateIndex("orders", List.of("customer_id")),
             new CandidateIndex("customers", List.of("id"))
+        );
+    }
+
+    @Test
+    void orderByOnlyColumn_producesSingleColumnSortCandidate() {
+        // SELECT * FROM orders ORDER BY order_date; -- no WHERE clause at all
+        ParsedQuery query = new ParsedQuery("orders", List.of(), List.of(), List.of(new TableColumn("orders", "order_date")));
+
+        List<CandidateIndex> candidates = CandidateGenerator.generate(query);
+
+        assertThat(candidates).containsExactly(
+            new CandidateIndex("orders", List.of("order_date"))
+        );
+    }
+
+    @Test
+    void filterPlusOrderByOnDifferentColumns_producesCompositeAndSingleCandidates() {
+        // SELECT * FROM orders WHERE customer_id = 5 ORDER BY order_date;
+        ParsedQuery query = new ParsedQuery(
+            "orders",
+            List.of(new TableColumn("orders", "customer_id")),
+            List.of(),
+            List.of(new TableColumn("orders", "order_date"))
+        );
+
+        List<CandidateIndex> candidates = CandidateGenerator.generate(query);
+
+        assertThat(candidates).containsExactly(
+            new CandidateIndex("orders", List.of("customer_id")),
+            new CandidateIndex("orders", List.of("order_date")),
+            new CandidateIndex("orders", List.of("customer_id", "order_date"))
+        );
+    }
+
+    @Test
+    void orderByColumnAlsoFiltered_noRedundantSingleColumnCandidate() {
+        // SELECT * FROM orders WHERE customer_id = 5 ORDER BY customer_id;
+        ParsedQuery query = new ParsedQuery(
+            "orders",
+            List.of(new TableColumn("orders", "customer_id")),
+            List.of(),
+            List.of(new TableColumn("orders", "customer_id"))
+        );
+
+        List<CandidateIndex> candidates = CandidateGenerator.generate(query);
+
+        // Only the filter-column candidate — no duplicate single-column order-by
+        // candidate, and no self-composite (customer_id, customer_id).
+        assertThat(candidates).containsExactly(
+            new CandidateIndex("orders", List.of("customer_id"))
         );
     }
 }

@@ -1,0 +1,207 @@
+-- Theme: Platform-Wide Peak Traffic
+-- A single large, mixed workload spanning all 7 tables at once, simulating
+-- peak-traffic query mix across the whole platform rather than one business
+-- area — deliberately larger (100 queries) for timing/throughput purposes.
+-- NOT run against the backend by design; left for manual timing.
+-- Format matches workload/queries.sql exactly (WorkloadReader-compatible):
+-- "--" comment lines are stripped, statements split on ";".
+
+SELECT * FROM categories;
+
+SELECT * FROM categories WHERE name = 'Electronics';
+
+SELECT * FROM categories WHERE name = 'Furniture';
+
+SELECT * FROM categories WHERE parent_id = 221;
+
+SELECT * FROM categories WHERE parent_id = 1444;
+
+SELECT * FROM products WHERE category_id = 1451;
+
+SELECT * FROM products WHERE category_id = 3079;
+
+SELECT * FROM products WHERE category_id = 7450;
+
+SELECT * FROM products WHERE status = 'active';
+
+SELECT * FROM products WHERE status = 'discontinued';
+
+SELECT * FROM products WHERE price > 15000;
+
+SELECT * FROM products WHERE price BETWEEN 5000 AND 25000;
+
+SELECT * FROM products WHERE rating >= 4.5;
+
+SELECT * FROM products WHERE brand = 'CoreLine';
+
+SELECT * FROM products WHERE brand = 'SmartLife';
+
+SELECT * FROM products WHERE brand IN ('EliteHome', 'UrbanGear', 'ProMax');
+
+SELECT * FROM products WHERE stock < 5;
+
+SELECT * FROM products WHERE category_id = 1451 AND status = 'active';
+
+SELECT * FROM products WHERE (status = 'active' OR status = 'discontinued') AND price > 20000;
+
+SELECT * FROM products WHERE status = 'active' ORDER BY rating DESC;
+
+SELECT * FROM products ORDER BY created_at DESC;
+
+SELECT * FROM products WHERE category_id = 3079 ORDER BY price;
+
+SELECT * FROM customers WHERE status = 'active';
+
+SELECT * FROM customers WHERE status = 'suspended';
+
+SELECT * FROM customers WHERE country = 'India';
+
+SELECT * FROM customers WHERE country = 'UAE';
+
+SELECT * FROM customers WHERE city = 'Pune';
+
+SELECT * FROM customers WHERE city = 'Ahmedabad';
+
+SELECT * FROM customers WHERE state = 'Tamil Nadu';
+
+SELECT * FROM customers WHERE state = 'Rajasthan';
+
+SELECT * FROM customers WHERE country = 'USA' AND status = 'active';
+
+SELECT * FROM customers WHERE (status = 'inactive' OR status = 'suspended') AND country = 'UAE';
+
+SELECT * FROM customers WHERE created_at BETWEEN '2025-03-01' AND '2025-09-30';
+
+SELECT * FROM customers WHERE country IN ('India', 'UAE');
+
+SELECT * FROM customers ORDER BY created_at DESC;
+
+SELECT * FROM customers WHERE status = 'active' ORDER BY name;
+
+SELECT * FROM customers WHERE id = 7000;
+
+SELECT * FROM orders WHERE status = 'pending';
+
+SELECT * FROM orders WHERE status = 'shipped';
+
+SELECT * FROM orders WHERE status = 'cancelled';
+
+SELECT * FROM orders WHERE customer_id = 300;
+
+SELECT * FROM orders WHERE customer_id = 1500 AND status = 'delivered';
+
+SELECT * FROM orders WHERE total_amount > 100000;
+
+SELECT * FROM orders WHERE total_amount BETWEEN 20000 AND 80000;
+
+SELECT * FROM orders WHERE payment_status = 'paid';
+
+SELECT * FROM orders WHERE payment_status = 'failed';
+
+SELECT * FROM orders WHERE (status = 'pending' OR status = 'processing') AND payment_status = 'pending';
+
+SELECT * FROM orders WHERE shipping_city = 'Kolkata';
+
+SELECT * FROM orders WHERE shipping_city = 'Toronto';
+
+SELECT * FROM orders WHERE shipping_city IN ('London', 'Singapore', 'Mumbai');
+
+SELECT * FROM orders WHERE created_at > '2025-09-01';
+
+SELECT * FROM orders WHERE updated_at BETWEEN '2025-01-01' AND '2026-01-01';
+
+SELECT * FROM orders WHERE status = 'delivered' ORDER BY created_at DESC;
+
+SELECT * FROM orders ORDER BY total_amount DESC;
+
+SELECT * FROM orders WHERE id = 15000;
+
+SELECT * FROM orders;
+
+SELECT * FROM order_items WHERE order_id = 15000;
+
+SELECT * FROM order_items WHERE product_id = 6240;
+
+SELECT * FROM order_items WHERE quantity = 1;
+
+SELECT * FROM order_items WHERE quantity > 2;
+
+SELECT * FROM order_items WHERE unit_price BETWEEN 1000 AND 10000;
+
+SELECT * FROM order_items WHERE unit_price > 30000;
+
+SELECT * FROM order_items WHERE order_id IN (15000, 15001, 15002);
+
+SELECT * FROM order_items ORDER BY unit_price DESC;
+
+SELECT * FROM order_items WHERE product_id = 8588 AND quantity > 1;
+
+SELECT * FROM payments WHERE status = 'completed';
+
+SELECT * FROM payments WHERE status = 'pending';
+
+SELECT * FROM payments WHERE method = 'debit_card';
+
+SELECT * FROM payments WHERE method = 'net_banking';
+
+SELECT * FROM payments WHERE method IN ('upi', 'wallet');
+
+SELECT * FROM payments WHERE amount > 50000;
+
+SELECT * FROM payments WHERE amount BETWEEN 2000 AND 15000;
+
+SELECT * FROM payments WHERE (status = 'failed' OR status = 'pending') AND method = 'debit_card';
+
+SELECT * FROM payments WHERE created_at > '2025-04-01';
+
+SELECT * FROM payments WHERE order_id = 15000;
+
+SELECT * FROM payments WHERE customer_id = 300;
+
+SELECT * FROM payments ORDER BY amount DESC;
+
+SELECT * FROM payments WHERE status = 'completed' ORDER BY created_at DESC;
+
+SELECT * FROM shipping_addresses WHERE country = 'Canada';
+
+SELECT * FROM shipping_addresses WHERE country = 'Singapore';
+
+SELECT * FROM shipping_addresses WHERE state = 'Ontario';
+
+SELECT * FROM shipping_addresses WHERE state = 'Telangana';
+
+SELECT * FROM shipping_addresses WHERE city = 'Chennai';
+
+SELECT * FROM shipping_addresses WHERE postal_code = '110001';
+
+SELECT * FROM shipping_addresses WHERE country = 'India' AND state = 'Gujarat';
+
+SELECT * FROM shipping_addresses WHERE country IN ('UK', 'Canada', 'Singapore');
+
+SELECT * FROM shipping_addresses WHERE customer_id = 300;
+
+SELECT * FROM shipping_addresses ORDER BY country;
+
+SELECT * FROM products p JOIN categories c ON p.category_id = c.id WHERE c.name = 'Footwear';
+
+SELECT * FROM products p JOIN categories c ON p.category_id = c.id WHERE p.rating > 4.0;
+
+SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id WHERE c.country = 'India';
+
+SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.status = 'shipped' AND c.status = 'active';
+
+SELECT * FROM order_items oi JOIN orders o ON oi.order_id = o.id WHERE o.status = 'processing';
+
+SELECT * FROM order_items oi JOIN products p ON oi.product_id = p.id WHERE p.category_id = 1451;
+
+SELECT * FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status = 'pending';
+
+SELECT * FROM payments p JOIN customers c ON p.customer_id = c.id WHERE c.country = 'UAE';
+
+SELECT * FROM shipping_addresses s JOIN orders o ON s.order_id = o.id WHERE o.status = 'delivered';
+
+SELECT * FROM shipping_addresses s JOIN customers c ON s.customer_id = c.id WHERE c.status = 'active';
+
+SELECT * FROM orders o JOIN payments p ON o.id = p.order_id WHERE p.status = 'refunded';
+
+SELECT * FROM order_items oi JOIN orders o ON oi.order_id = o.id WHERE o.status = 'cancelled' AND oi.quantity > 1;

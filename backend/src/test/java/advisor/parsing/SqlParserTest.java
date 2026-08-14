@@ -103,4 +103,37 @@ class SqlParserTest {
 
         assertThat(parsed.joins()).isEmpty();
     }
+
+    @Test
+    void orderByOnPrimaryTable_extracted() {
+        ParsedQuery parsed = SqlParser.parse("SELECT * FROM orders WHERE customer_id = 5 ORDER BY order_date;");
+
+        assertThat(parsed.qualifiedOrderByColumns()).containsExactly(new TableColumn("orders", "order_date"));
+    }
+
+    @Test
+    void orderByOnJoinedTable_attributedToRealTableNotAlias() {
+        ParsedQuery parsed = SqlParser.parse(
+            "SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id ORDER BY c.created_at;"
+        );
+
+        assertThat(parsed.qualifiedOrderByColumns()).containsExactly(new TableColumn("customers", "created_at"));
+    }
+
+    @Test
+    void noOrderByClause_emptyOrderByColumns() {
+        ParsedQuery parsed = SqlParser.parse("SELECT * FROM products WHERE category_id = 5;");
+
+        assertThat(parsed.qualifiedOrderByColumns()).isEmpty();
+    }
+
+    @Test
+    void multipleOrderByColumns_bothExtracted() {
+        ParsedQuery parsed = SqlParser.parse("SELECT * FROM orders ORDER BY customer_id, order_date DESC;");
+
+        assertThat(parsed.qualifiedOrderByColumns()).containsExactly(
+            new TableColumn("orders", "customer_id"),
+            new TableColumn("orders", "order_date")
+        );
+    }
 }

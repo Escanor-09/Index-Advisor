@@ -10,7 +10,7 @@ function CandidateTable({ candidates }) {
                     <tr>
                         <th>Rank</th>
                         <th>Index</th>
-                        <th>Cost</th>
+                        <th>Time (ms)</th>
                         <th>Improvement</th>
                     </tr>
                 </thead>

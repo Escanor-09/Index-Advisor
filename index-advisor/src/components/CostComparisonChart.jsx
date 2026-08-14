@@ -20,7 +20,7 @@ function CostComparisonChart({ data }) {
 
     return (
         <div className="chart-card">
-            <h2>Cost Comparison</h2>
+            <h2>Execution Time Comparison</h2>
 
             <ResponsiveContainer width="100%" height={350}>
                 <BarChart
@@ -46,7 +46,7 @@ function CostComparisonChart({ data }) {
                     <Tooltip
                         formatter={(value) => [
                             value,
-                            "Estimated Cost",
+                            "Execution Time (ms)",
                         ]}
                     />
 

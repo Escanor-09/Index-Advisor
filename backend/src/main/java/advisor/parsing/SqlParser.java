@@ -19,6 +19,7 @@ import net.sf.jsqlparser.schema.Table;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.FromItem;
 import net.sf.jsqlparser.statement.select.Join;
+import net.sf.jsqlparser.statement.select.OrderByElement;
 import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.statement.select.Select;
 
@@ -64,7 +65,40 @@ public class SqlParser {
             .sorted(Comparator.comparing(TableColumn::table).thenComparing(TableColumn::column))
             .toList();
 
-        return new ParsedQuery(primaryTable, distinctFilterColumns, joins);
+        List<TableColumn> distinctOrderByColumns = extractOrderByColumns(plainSelect.getOrderByElements(), aliasToTable, primaryTable)
+            .stream()
+            .distinct()
+            .sorted(Comparator.comparing(TableColumn::table).thenComparing(TableColumn::column))
+            .toList();
+
+        return new ParsedQuery(primaryTable, distinctFilterColumns, joins, distinctOrderByColumns);
+    }
+
+    /**
+     * Only a plain column reference per ORDER BY item is recognized (e.g.
+     * "ORDER BY orders.order_date"); an expression (e.g. "ORDER BY total * 2")
+     * contributes nothing, mirroring extractQualifiedColumns' treatment of
+     * non-column leaves — a wrong guess here would propose a sort-avoidance
+     * index that can't actually satisfy the real sort.
+     */
+    private static List<TableColumn> extractOrderByColumns(
+        List<OrderByElement> orderByElements,
+        Map<String, String> aliasToTable,
+        String defaultTable
+    ) {
+        List<TableColumn> columns = new ArrayList<>();
+
+        if (orderByElements == null) {
+            return columns;
+        }
+
+        for (OrderByElement element : orderByElements) {
+            if (element.getExpression() instanceof Column column) {
+                columns.add(new TableColumn(resolveTable(column, aliasToTable, defaultTable), column.getColumnName()));
+            }
+        }
+
+        return columns;
     }
 
     /**

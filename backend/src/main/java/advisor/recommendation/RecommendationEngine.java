@@ -20,18 +20,55 @@ public class RecommendationEngine {
      * candidates into a chosen index SET.
      */
     public static List<Recommendation> recommend(List<EvaluationResult> results, String sql) {
-        return results.stream()
+        return pruneDominated(results).stream()
             .filter(r -> r.improvementPercent() >= MIN_IMPROVEMENT_PERCENT)
             .sorted(Comparator.comparingDouble(EvaluationResult::improvementPercent).reversed())
             .map(r -> toRecommendation(r, sql))
             .toList();
     }
 
+    /**
+     * Drops any result whose candidate is strictly dominated by another
+     * candidate on the same table: same-or-fewer columns, those columns a
+     * leading prefix of the dominated one's, and an equal-or-better measured
+     * improvement. A 3-column composite that helps no more than its own
+     * 1-column prefix already does is pure extra write/storage cost with
+     * zero additional benefit — Postgres can already use the shorter index's
+     * leading columns for the exact same plan.
+     */
+    static List<EvaluationResult> pruneDominated(List<EvaluationResult> results) {
+        return results.stream()
+            .filter(candidate -> results.stream()
+                .filter(other -> other != candidate)
+                .noneMatch(other -> dominates(other, candidate)))
+            .toList();
+    }
+
+    private static boolean dominates(EvaluationResult a, EvaluationResult b) {
+        return a.candidate().tableName().equals(b.candidate().tableName())
+            && isPrefix(a.candidate().columns(), b.candidate().columns())
+            && a.improvementPercent() >= b.improvementPercent();
+    }
+
+    private static boolean isPrefix(List<String> small, List<String> large) {
+        if (small.size() > large.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < small.size(); i++) {
+            if (!small.get(i).equalsIgnoreCase(large.get(i))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static Recommendation toRecommendation(EvaluationResult r, String sql) {
         String reason = "Query filters on " + r.candidate().toDdlColumnList()
             + "; this candidate showed a measurable improvement when evaluated against the real query plan.";
 
-        String observedEffect = r.beforeNodeType() + " -> " + r.afterNodeType();
+        String observedEffect = r.observedEffect();
 
         return new Recommendation(
             r.candidate(),

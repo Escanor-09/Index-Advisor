@@ -1,13 +1,13 @@
 # Index Advisor — Current Progress
 
-What has been built, verified, and what's left. For *why* things are designed the way they are, see `ARCHITECTURE.md`. For interview-ready Q&A, see `INTERVIEW_NOTES.md`.
+What has been built, verified, and what's left. For *why* things are designed the way they are, see `ARCHITECTURE.md`. For interview-ready Q&A, see `INTERVIEW_NOTES.md`. All three docs (plus `FUTURE_ADDITIONS.md` and `FRONTEND_README.md`) now live together under `docs/` — nothing project-relevant is scattered at the repo root anymore.
 
 ## Snapshot
 
 - **Goal:** analyze SQL queries/workloads and recommend PostgreSQL indexes, using Postgres's own `EXPLAIN ANALYZE` as ground truth instead of a custom cost model.
-- **Stack:** Java 21, Spring Boot 3.5.3, HikariCP-pooled JDBC, JSqlParser 5.3, Jackson, PostgreSQL, HypoPG extension. React frontend planned, not built.
-- **Completion: 89%** on the original 16-milestone roadmap (milestone-weighted, see Roadmap below) — plus 5 additional priority improvements (below) not on that roadmap at all: quantitative storage cost, connection pooling, an automated test suite (42 tests), HypoPG-based screening, and JOIN support.
-- **Core advisor engine — single-query and workload-level, with JOIN support — is fully built, verified against a real database and a real test suite, and exposed over HTTP.** What remains on the original roadmap is a frontend and deeper cost modeling.
+- **Stack:** Java 21, Spring Boot 3.5.3, HikariCP-pooled JDBC, JSqlParser 5.3, Jackson, PostgreSQL, HypoPG extension. React (Vite) frontend fully connected — both single-query and workload analysis are live against the real backend.
+- **Completion: 97%** on the original 16-milestone roadmap (milestone-weighted, see Roadmap below) — plus a growing list of off-roadmap priority improvements: quantitative storage cost, connection pooling, a 94-test automated suite, HypoPG-based screening (now genuinely load-bearing in the live workload pipeline, not just a demo), JOIN support, ORDER BY-aware candidates/existing-index awareness/prefix-domination pruning/AI-generated explanations, an explicit storage/count budget for index-set selection, accurate nested-plan-change reporting, and public-API request-size hardening.
+- **Core advisor engine — single-query and workload-level, with JOIN support, HypoPG-screened evaluation, and a real selection budget — is fully built, verified against a real database and a 94-test suite, exposed over a hardened HTTP API, and driving a real frontend for both analysis modes.** Only write-overhead cost modeling remains on the original roadmap; deployment/CI is the largest off-roadmap gap (see `RUNDOWN.html`).
 
 ---
 
@@ -107,8 +107,67 @@ After the clamp too:            ~-5.6% improvement, "Seq Scan -> Seq Scan"   (ma
 ```
 Re-ran the full CLI demo afterward: `WorkloadRecommendationEngine` again correctly excludes `products(status)`/`customers(status)`; `QueryAdvisor` again correctly excludes `products(status)` from Q4 (back to exactly 2 recommendations, not 3). The bug had been quietly corrupting actual set-selection and filtering decisions, not just cosmetic numbers — this fix restored correct behavior, verified by outcome, not just by re-reading the code. Zero leftover indexes throughout. Cost: 8 `EXPLAIN ANALYZE` calls per `evaluate()` instead of 2 — still low tens-of-milliseconds total, no perceptible slowdown.
 
+### Milestone 15 — Frontend Integration & Backend Feature Parity — DONE
+
+The project's frontend turned out to already exist — a teammate had built both a React (Vite) frontend and an independent **C++ backend** (`libpg_query` for parsing, `libpqxx`, HypoPG-only evaluation, `cpp-httplib` HTTP server), sitting on the repo's `main` branch, unrelated git history to this project's `backend` branch. Pulled in (`git archive` into a scratch dir first, to inspect without touching the working tree), then read in full — not skimmed — before deciding anything.
+
+**Comparison, by actually reading both codebases, not by reputation:**
+
+| | His C++ backend | This Java backend |
+|---|---|---|
+| Parsing | `libpg_query` (real Postgres parser) — more robust | JSqlParser (3rd-party) — a real bug already found/fixed here |
+| Scope | Single query only | Single query **and** workload-level (greedy set selection) |
+| Evaluation | HypoPG only — planner cost *estimate*, never runs real DDL | Real `CREATE INDEX` + `EXPLAIN ANALYZE` — measured, not estimated |
+| ORDER BY | Yes | No (until this round) |
+| Existing-index awareness | Yes (`pg_indexes` + prefix coverage) | No (until this round) |
+| Redundant-candidate pruning | Yes (prefix domination) | No (until this round) |
+| Storage cost | Not measured | Measured (`pg_relation_size`) |
+| Concurrency safety | One `pqxx::connection` shared across a multi-threaded HTTP server — looks thread-unsafe | HikariCP pool — a real collision bug already found/fixed here |
+| SQL-injection defense on dynamic DDL | None — identifiers concatenated raw | Schema allowlist + quoted identifiers, tested against a crafted payload |
+| Tests | None found | 51 tests before this round |
+| AI explanations | Yes (Gemini) | No (until this round) |
+| Credentials | **Hardcoded in `Server.cpp`, committed to the public repo** | Externalized via `application.properties` |
+
+**Security finding, unrelated to the comparison itself:** `backend/api/Server.cpp` (his code) hardcodes live Supabase credentials — including the same password as this project's own local `.env` — directly in source, pushed to the public GitHub repo. Flagged immediately; rotating it is a Supabase-account action for the project owner, not something done from this session.
+
+**Decision:** hybrid, not a wholesale pick. Java stays the core engine for single-query analysis (real measured proof, workload-level reasoning his code doesn't have at all, and the safety/concurrency/test hardening that came from bugs actually found and fixed in this codebase) — Java's workload advisor was never in contention, since his code has no workload endpoint at all. His two genuine feature gaps (ORDER BY-aware candidates, existing-index awareness) plus his prefix-domination pruning and AI-explanation UX were ported natively into Java rather than via a cross-language microservice call — less total engineering than standing up a second live service for something this small, and his code stays untouched in the repo/git history rather than being discarded.
+
+**What was built, each verified against the real local database, not assumed correct:**
+
+1. **`SqlParser`/`ParsedQuery`: ORDER BY extraction.** New `qualifiedOrderByColumns` field (table-attributed, same shape as `qualifiedFilterColumns`), extracted via JSqlParser's `OrderByElement`/`getOrderByElements()`, alias-resolved the same way WHERE columns already were.
+2. **`CandidateGenerator`: ORDER BY-aware candidates.** A single-column sort-avoidance candidate per order-by column not already filter-covered, plus a `(filterColumn, orderByColumn)` composite per pair on the same table — lets Postgres serve the WHERE predicate and avoid a separate sort with one index. Verified live: `SELECT * FROM orders WHERE customer_id = 500 ORDER BY created_at;` proposed all 3 shapes (`(customer_id)` 97.9%, `(created_at)` alone 0.0%, `(customer_id, created_at)` 99.0% — the composite correctly won).
+3. **`CandidateIndex.appliesTo()` extended.** Had to also match order-by-only columns, not just filter columns — otherwise `WorkloadIndexEvaluator` would silently never evaluate a pure sort-avoidance candidate against the very query that motivated it. Caught while writing the ORDER BY feature, before it could become a silent workload-level gap — not found live.
+4. **New `ExistingIndexManager`/`ExistingIndex`** (`advisor.candidates`). Reads `pg_indexes`, parses `indexdef` (controlled string search — Postgres always schema-qualifies the table name, and every index this project creates is a plain column list, never functional/partial), prefix-matches candidates against real indexes. Wired into `QueryAdvisor` before evaluation, so a covered candidate never pays the real `CREATE`/`DROP INDEX` cost of being evaluated. Verified live: `SELECT * FROM orders WHERE id = 5;` (already the primary key) now returns zero candidates, not a redundant recommendation.
+5. **`RecommendationEngine.pruneDominated()`.** Drops any evaluated candidate strictly dominated by a same-or-shorter prefix candidate with equal-or-better measured improvement — a 3-column composite that helps no more than its own 1-column prefix already does is pure extra write/storage cost. Verified with a case where a composite ties its prefix (dropped) and a case where it genuinely beats it (both kept, matching the real `(customer_id, created_at)` result above).
+6. **New `AiExplanationService`** (`advisor.ai`), calling Gemini via `java.net.http.HttpClient` + Jackson (no new dependency needed — both already present). Reads `GEMINI_API_KEY` from the environment; degrades gracefully to a clear fallback message on a missing key, network failure, timeout, or malformed response — verified live with no key set: `{"reasoning": ["Gemini API key not found."]}`, not an exception.
+7. **New `AnalyzeResponse` DTO** (`advisor.web`), built via `QueryAdvisor.analyzeDetailed()` (new method exposing the full evaluated-candidate list and parsed query, not just the filtered recommendations `analyze()` still returns for backward compatibility). Deliberately surfaces real measured execution time in milliseconds as `originalCost`/`bestCost`/candidate `cost` — not a planner cost estimate — since that's the actual point of this engine versus the alternative. Frontend labels updated to match (`"Original Cost"` → `"Original Time (ms)"`, chart title/tooltip likewise) so the UI doesn't claim to show something it isn't.
+8. **New `/generate-explanation` endpoint**, wired to `AiExplanationService`.
+9. **Frontend rewiring** (`index-advisor/src/pages/SingleQuery.jsx` + label text in `ResultCard.jsx`/`CandidateTable.jsx`/`CostComparisonChart.jsx`): axios calls moved from the C++ backend's `/api/analyze-query`/`/api/generate-explanation` to Java's `/analyze`/`/generate-explanation`; request/response field names updated to match. `npm run build` verified clean.
+
+**End-to-end verification, against the live Spring Boot server and the real local database** (not just unit tests): started the server, `curl`'d `/analyze` with a plain filter query, an ORDER BY query, an already-PK-covered query, and a JOIN query — all returned exactly the shapes above, all matched what the frontend components expect field-for-field. `/generate-explanation` verified to degrade gracefully with no API key configured. Server stopped cleanly afterward, zero leftover experimental indexes (both new integration tests clean up via `@AfterAll`, matching the project's existing discipline).
+
+**Test suite: 59 tests, 0 failures** (up from 51) — 9 new tests for ORDER BY parsing/candidate generation/`appliesTo`, 5 new integration tests for `ExistingIndexManager` against the real database, 3 new tests for prefix-domination pruning.
+
+**`WorkloadOptimization.jsx` (the workload frontend page) was found still 100% mock** — never wired to either backend (no C++ workload endpoint ever existed to wire it to). Out of scope for that round's explicit ask (the contention was specifically single-query); left as a flagged next step — closed the following round, below.
+
+### Workload Page — Live Wiring + Demo-Ready Query Building — DONE
+
+Triggered by two direct observations: no loading spinner ever appeared while a workload was "analyzing" (because `handleAnalyze()` was fully synchronous mock code — a spinner has nothing to attach to without a real network call), and a demo presenter shouldn't need to hand-pick a workload file.
+
+1. **`WorkloadQueryAdvisor.analyzeDetailed()`** — same pattern as single-query's `analyzeDetailed()`: exposes the full `WorkloadProfile` and every candidate's raw `List<WorkloadEvaluationResult>` (not just the final chosen `List<Recommendation>`), so the web layer can compute real per-index numbers. `analyzeWorkload()` now just calls it and returns `.recommendations()` — zero behavior change for existing callers.
+2. **New `WorkloadAnalyzeResponse` DTO** — for each chosen `Recommendation`, finds its originating `WorkloadEvaluationResult` and filters `queryEvaluations` down to exactly the queries in `Recommendation.affectedQueries()` (reusing the engine's own >=10%-improvement decision rather than re-deriving that threshold), then averages `beforeExecutionTime`/`afterExecutionTime` across just those. `coverage` is `affectedQueries().size() / totalWorkloadQueries * 100` — a real fraction of the actual workload, not of the candidate's own applicable-query subset. Workload-wide `beforeCost`/`afterCost`/`improvement` are averaged across the chosen indexes. `/analyze-workload`'s response shape changed from raw `List<Recommendation>` to this DTO — safe to change since nothing else depended on the old shape yet.
+3. **5 new tests** (`WorkloadAnalyzeResponseTest`) — cost/improvement correctly reflect only the "helped" subset (not diluted by a barely-positive query that didn't clear the threshold), coverage is workload-wide not candidate-local, overall before/after/improvement average correctly across multiple chosen indexes, empty-recommendation and orphaned-candidate (defensive) cases handled without throwing. **64 tests total, 0 failures.**
+4. **7 themed sample workload files** (`backend/workload/samples/*.txt`, built the prior round — 6 business-area themes at 30-34 queries each, plus a 100-query cross-table stress-test file) copied into `index-advisor/public/` so the frontend can fetch them as static assets — no new backend endpoint needed for what's fundamentally static demo content.
+5. **`WorkloadOptimization.jsx` rebuilt** around three query-source modes instead of a single mandatory file upload: a **preset dropdown** (fetches and parses one of the 7 themed files via a JS port of `WorkloadReader.readQueries()` — strip `--` comments, split on `;`, identical semantics to the backend), **write-your-own** (a textarea, same parsing), and **quick-add** (three curated categories — Customers, Products, Purchases — each a row of one-click chips that append a specific, already-schema-verified query). All three modes converge into one visible, editable "queries in this workload" list (removable per-item, clearable) that actually gets sent to `/analyze-workload` — consistent UX regardless of how the workload was built.
+6. **Loading spinner wired to the real call** — `AnalyzeButton` already had full spinner support built in (`loading` prop, `.button-spinner` CSS) from the single-query page; the workload page just never passed `loading` or tracked async state, because there was no async call to track. Fixed directly: `handleAnalyze` is now a real `axios.post` to `/analyze-workload` with `loading` state driving both the button's own spinner and a separate loading card explaining *why* larger workloads take longer (every candidate is a real CREATE INDEX / measure / DROP cycle).
+7. **Result rendering reuses the existing components unchanged** (`WorkloadResultCard`, `CostComparisonChart`, `CandidateTable`, `CoverageAnalysisCard`, `RecommendedIndexSetCard`) — the new `WorkloadAnalyzeResponse` shape was deliberately designed to match what they already expected, so only label text needed fixing (`WorkloadResultCard`'s "Original/Optimized Cost" → "Avg. Original/Optimized Time (ms)", same real-measured-time accuracy fix already applied to the single-query page).
+
+**Verified end to end against the live server**, not assumed from the code: `/analyze-workload` hit directly with a real 30-query preset file and a real `Origin` header — real per-index costs, real coverage percentages matching `helped-queries / 30`, correct `Access-Control-Allow-Origin` on the actual response. Frontend confirmed serving preset files correctly via `curl` against the Vite dev server. `npm run build` and the full 64-test backend suite both clean.
+
+**Follow-up fix, same round: quick-add and custom-text queries now append rather than silently dedupe.** The first version's `addQuickQuery`/`addCustomText` both skipped adding a query already present in the list — reasonable-sounding, but wrong for the actual use case: a presenter should be able to click one quick-add chip repeatedly to build up a large workload (e.g. toward 100 queries) without needing that many distinct pre-written buttons. Both functions now plain-append; React's index-based `key`/removal already made this safe (no value-based key collision risk from allowing duplicates).
+
 ### Not Yet Started
-Milestone 15 (React frontend) and Milestone 16 (index cost/storage/write-overhead modeling — partially informed by the "quantify tradeoffs" future improvement below).
+Milestone 16 (index cost/storage/write-overhead modeling — partially informed by the "quantify tradeoffs" future improvement below).
 
 ---
 
@@ -199,64 +258,113 @@ backend/
     │   ├── resources/application.properties           externalized DB config, env-var-backed with defaults
     │   └── java/advisor/
     │       ├── Main.java                              CLI demo/verification entry point (not a test suite)
-    │       ├── QueryAdvisor.java                       single-query orchestrator (Milestone 12)
-    │       ├── WorkloadQueryAdvisor.java                workload orchestrator (Milestone 13)
+    │       ├── ApiLimits.java                          MAX_WORKLOAD_QUERIES/MAX_CANDIDATES/MAX_SQL_LENGTH — shared
+    │       │                                            constants, checked before any real DB work runs
+    │       ├── WorkloadBenchmark.java                   standalone entry point (not JUnit) — screened vs. real-only
+    │       │                                            pipeline timing across sample workloads; see
+    │       │                                            docs/SCALABILITY_BENCHMARK.md
+    │       ├── QueryAdvisor.java                       single-query orchestrator (Milestone 12); analyzeDetailed()
+    │       │                                            exposes parsed query + all results, analyze() wraps it;
+    │       │                                            validateSql() rejects empty/oversized queries fast
+    │       ├── WorkloadQueryAdvisor.java                workload orchestrator (Milestone 13); generate candidates ->
+    │       │                                            screen with HypoPG -> validate promoted ones for real ->
+    │       │                                            choose index set; validateWorkload()/validateCandidateCount()
+    │       │                                            reject oversized requests before real DB work runs
+    │       ├── ai/
+    │       │   └── AiExplanationService.java             Gemini call via java.net.http.HttpClient; graceful fallback
     │       ├── web/
     │       │   ├── IndexAdvisorApplication.java         @SpringBootApplication entry point (Milestone 14)
     │       │   ├── AdvisorConfig.java                    PostgresManager bean, reads application.properties
-    │       │   ├── AdvisorController.java                POST /analyze, POST /analyze-workload, error handling
+    │       │   ├── AdvisorController.java                POST /analyze, POST /analyze-workload,
+    │       │   │                                          POST /generate-explanation, error handling
     │       │   ├── AnalyzeRequest.java                   record: query
+    │       │   ├── AnalyzeResponse.java                   record: bestIndex/originalCost/bestCost/improvement/
+    │       │   │                                          candidates/analysis — built from analyzeDetailed()
     │       │   ├── AnalyzeWorkloadRequest.java            record: queries
+    │       │   ├── GenerateExplanationRequest.java         record: query, bestIndex, improvementPercent
+    │       │   ├── GenerateExplanationResponse.java        record: reasoning
     │       │   └── ErrorResponse.java                     record: error
     │       ├── database/
     │       │   └── PostgresManager.java                  HikariCP-pooled; executeScalar/executeColumn/explainAnalyze/
     │       │                                              executeUpdate; openSession()/ConnectionSession for
     │       │                                              same-connection sequences (HypoPG)
     │       ├── parsing/
-    │       │   ├── ParsedQuery.java                       record: tableName, qualifiedFilterColumns, joins
-    │       │   │                                          (+ filterColumns() derived, singleTable() factory)
+    │       │   ├── ParsedQuery.java                       record: tableName, qualifiedFilterColumns, joins,
+    │       │   │                                          qualifiedOrderByColumns (+ filterColumns() derived,
+    │       │   │                                          singleTable() factory)
     │       │   ├── TableColumn.java                       record: table, column
     │       │   ├── JoinClause.java                        record: leftTable, leftColumn, rightTable, rightColumn
-    │       │   └── SqlParser.java                         SQL text -> ParsedQuery (JSqlParser, alias-aware, JOIN-aware)
+    │       │   └── SqlParser.java                         SQL text -> ParsedQuery (JSqlParser, alias-aware,
+    │       │                                               JOIN-aware, ORDER BY-aware)
     │       ├── planning/
     │       │   └── QueryPlan.java                         EXPLAIN JSON -> typed accessors + getAllNodeTypes()
-    │       │                                              (depth-first full plan shape, not just root)
+    │       │                                              (depth-first full plan shape, not just root) +
+    │       │                                              describeChange() — diffs before/after node-type
+    │       │                                              sequences, describing nested changes a root-only
+    │       │                                              comparison would misreport as "no change"
     │       ├── candidates/
-    │       │   ├── CandidateIndex.java                    record: tableName, columns (+ appliesTo — filter- and
-    │       │   │                                          join-column aware — toDdlColumnList)
-    │       │   └── CandidateGenerator.java                 ParsedQuery -> List<CandidateIndex>, per-table filter
-    │       │                                               candidates + per-side join candidates
+    │       │   ├── CandidateIndex.java                    record: tableName, columns (+ appliesTo — filter-,
+    │       │   │                                          join-, and order-by-column aware — toDdlColumnList)
+    │       │   ├── CandidateGenerator.java                 ParsedQuery -> List<CandidateIndex>, per-table filter
+    │       │   │                                           candidates + per-side join candidates + ORDER BY-aware
+    │       │   │                                           sort-avoidance singles/composites
+    │       │   ├── ExistingIndex.java                      record: tableName, columns (from a real pg_indexes row)
+    │       │   └── ExistingIndexManager.java                reads pg_indexes, prefix-matches candidates against
+    │       │                                                real indexes to skip redundant evaluation
     │       ├── evaluation/
-    │       │   ├── EvaluationResult.java                   record: + indexSizeBytes
+    │       │   ├── EvaluationResult.java                   record: + indexSizeBytes, observedEffect (full plan-shape
+    │       │   │                                            diff, computed once via QueryPlan.describeChange)
     │       │   ├── HypoEvaluationResult.java                record: HypoPG screening result (estimated cost only)
     │       │   ├── IndexEvaluator.java                      CREATE/measure/DROP, DB safety guard, schema allowlist,
     │       │   │                                            measureStable, unique index names, computeImprovement
     │       │   │                                            (full plan-shape clamp), pg_relation_size
-    │       │   └── HypoIndexEvaluator.java                  hypopg_create_index/EXPLAIN/hypopg_reset via
-    │       │                                                one pinned connection
+    │       │   └── HypoIndexEvaluator.java                  hypopg_create_index/EXPLAIN/hypopg_reset; evaluate()
+    │       │                                                overload accepts a caller-provided ConnectionSession
+    │       │                                                so batch screening reuses one session, not one per call
     │       ├── workload/
     │       │   ├── WorkloadReader.java                      queries.sql -> List<String>
     │       │   ├── WorkloadQuery.java                       record: sql + ParsedQuery + QueryPlan
     │       │   ├── WorkloadProfile.java                     record: List<WorkloadQuery> + column frequency map
     │       │   ├── WorkloadAdvisor.java                      List<String> -> WorkloadProfile (profiling only)
+    │       │   ├── WorkloadHypoScreener.java                 candidate x workload -> promoted candidates only,
+    │       │   │                                             via HypoPG estimates (10% threshold)
     │       │   ├── QueryEvaluation.java                      record: sql + EvaluationResult pairing
     │       │   ├── WorkloadEvaluationResult.java             record: candidate + all its QueryEvaluations
     │       │   ├── WorkloadIndexEvaluator.java               candidate x workload -> WorkloadEvaluationResult
-    │       │   └── WorkloadRecommendationEngine.java          greedy index SET selection
+    │       │   ├── IndexSetBudget.java                       record: maxStorageBytes/maxIndexCount; UNLIMITED/
+    │       │   │                                             storageBytes(n)/indexCount(n) factories
+    │       │   └── WorkloadRecommendationEngine.java          greedy index SET selection + budget-aware overload
     │       └── recommendation/
     │           ├── Recommendation.java                       record: + indexSizeBytes, formatBytes()
-    │           └── RecommendationEngine.java                  single-query filter + rank + tier
+    │           └── RecommendationEngine.java                  filter + rank + tier + pruneDominated()
     └── test/java/advisor/
-        ├── parsing/SqlParserTest.java                        10 tests
-        ├── candidates/CandidateGeneratorTest.java              7 tests
-        ├── candidates/CandidateIndexTest.java                  8 tests
-        ├── recommendation/RecommendationEngineTest.java        4 tests
-        ├── workload/WorkloadRecommendationEngineTest.java      4 tests
+        ├── QueryAdvisorValidationTest.java                    5 tests
+        ├── WorkloadQueryAdvisorValidationTest.java             9 tests
+        ├── WorkloadQueryAdvisorIntegrationTest.java            2 tests (real database)
+        ├── parsing/SqlParserTest.java                        14 tests
+        ├── planning/QueryPlanTest.java                         6 tests
+        ├── candidates/CandidateGeneratorTest.java              10 tests
+        ├── candidates/CandidateIndexTest.java                  10 tests
+        ├── candidates/ExistingIndexManagerIntegrationTest.java  5 tests (real database)
+        ├── recommendation/RecommendationEngineTest.java        7 tests
+        ├── workload/WorkloadRecommendationEngineTest.java      9 tests
+        ├── workload/WorkloadHypoScreenerIntegrationTest.java   3 tests (real database)
+        ├── web/WorkloadAnalyzeResponseTest.java                5 tests
         ├── evaluation/IndexEvaluatorLogicTest.java             6 tests
         └── evaluation/IndexEvaluatorIntegrationTest.java       3 tests (real database)
 ```
 
-30 main Java files, 7 test files (42 tests, 0 failures), 1 `pom.xml`, 1 `application.properties`, 1 workload file. Verified via `mvn test` (fast, repeatable), `mvn exec:java` (full CLI demo against the real database), and live `curl` against a real running server.
+39 main Java files, 14 test files (94 tests, 0 failures), 1 `pom.xml`, 1 `application.properties`, 1 workload file. Verified via `mvn test` (fast, repeatable), `mvn exec:java` (full CLI demo against the real database), `mvn exec:java -Dexec.mainClass=advisor.WorkloadBenchmark` (scalability benchmark — the `exec.mainClass` property, previously hardcoded, is now overridable), and live `curl` against a real running server.
+
+```
+index-advisor/                                        React (Vite) frontend, pulled from the repo's main branch
+├── src/pages/
+│   ├── SingleQuery.jsx                                wired to Java's /analyze + /generate-explanation
+│   └── WorkloadOptimization.jsx                        live -- preset/custom/quick-add query building, wired to /analyze-workload
+└── src/components/                                     ResultCard, CandidateTable, QueryAnalysisCard,
+                                                          CostComparisonChart, Recommendation, WorkloadResultCard,
+                                                          CoverageAnalysisCard, RecommendedIndexSetCard, etc.
+```
 
 ---
 
@@ -267,24 +375,26 @@ Organized by category. Each is a deliberate scope boundary or accepted trade-off
 ### SQL parsing and understanding
 - **~~Single-table queries only~~ — JOIN support added.** Simple two-table equi-joins (`ON left.col = right.col`) parse correctly, alias-resolved, with WHERE columns attributed to their real table. **Still limited:** only single-condition equi-joins recognized — multi-condition `ON` clauses, non-equality joins, 3+ table chains, and joins against non-table `FromItem`s (subqueries) are a stated scope boundary, skipped rather than guessed at.
 - **`JSqlParser`, not Postgres's real grammar** (ANTLR-based). Bounded/mitigated, not eliminated.
-- **No subquery/CTE/`GROUP BY`/`HAVING`/`ORDER BY` awareness.** Only WHERE-clause predicates (and now join columns) contribute to candidates.
+- **~~No `ORDER BY` awareness~~ — added.** Table-attributed `qualifiedOrderByColumns`, alias-resolved the same way WHERE columns are. Still no subquery/CTE/`GROUP BY`/`HAVING` awareness — only WHERE-clause predicates, join columns, and now ORDER BY columns contribute to candidates.
 
 ### Candidate generation
-- **Not the full power set** — one candidate per filter column + one full composite, per table. Partial composites and alternate orderings never generated.
-- **Composite column order is alphabetical**, not selectivity-based.
+- **Not the full power set** — one candidate per filter column + one full composite, per table (plus, now, ORDER BY-aware singles and filter+sort composites). Partial composites and alternate orderings never generated.
+- **Composite column order is alphabetical** for filter-only composites, not selectivity-based. (Filter+ORDER BY composites are the one place column order is intentional — filter column leading, sort column trailing — since that's what actually lets Postgres serve both from one index.)
 - **No expression indexes, `INCLUDE` (covering) indexes, or partial indexes.**
-- **`appliesTo()` subset check for filters, exact-match for join columns** — not full leftmost-prefix modelling.
+- **~~`appliesTo()` subset check for filters, exact-match for join columns~~ — extended to ORDER BY columns too**, still not full leftmost-prefix modelling.
+- **~~No existing-index awareness~~ — added.** `ExistingIndexManager` skips any candidate already covered (exact match or leading-prefix match) by a real index in `pg_indexes`, before it's ever evaluated.
+- **~~No redundant-candidate pruning~~ — added.** `RecommendationEngine.pruneDominated()` drops a candidate strictly dominated by a same-or-shorter prefix with equal-or-better measured improvement.
 
 ### Evaluation
-- **~~Real DDL doesn't scale~~ — HypoPG built and cross-validated, not yet wired into the selection pipeline.** `HypoIndexEvaluator` works and agrees with real measurements on all 3 test candidates, including correctly predicting zero benefit where real measurement also found none. Not yet used for actual screen-then-validate set selection in `WorkloadQueryAdvisor` — a real capability sitting ready, not yet load-bearing, since current candidate counts (~10) don't yet make real-DDL evaluation the bottleneck.
+- **~~Real DDL doesn't scale~~ — HypoPG wired into the live selection pipeline.** `WorkloadHypoScreener` screens every candidate via HypoPG first; only promoted candidates pay the real CREATE/DROP INDEX cost. Genuinely load-bearing now, not a standalone demo — and honestly benchmarked, not just claimed: ~1.2x average speedup, ranging from a 10% slowdown (ID-heavy point-lookup workloads, where screening filters almost nothing) to 46%, correlating with promotion ratio rather than workload size. See `SCALABILITY_BENCHMARK.md`.
 - **~~Single-sample timing~~ — fixed, twice.** `measureStable()` (median of 3 + warm-up) plus a same-*full-plan-shape* clamp (not just root node type — that was itself a bug, found via JOIN testing, see Priority Improvements). Verified: the live-observed ~40% cache-warming artifact now measures ~-5.6%, matching the original pre-bug finding; a genuine ~93% join-column improvement that the root-only clamp had been silently discarding is now correctly credited. Residual: still single-machine, single-point-in-time; still no concurrent-load simulation.
 - **No write-path cost measurement.** Benefit side is measured precisely (including real index storage size, added this round); cost side (INSERT/UPDATE/DELETE overhead) isn't measured at all — `Recommendation.tradeoffs`' second line says so explicitly (`"not measured"`) rather than implying otherwise.
-- **`Recommendation.observedEffect` can be misleadingly uninformative for join queries** — e.g. `"Nested Loop -> Nested Loop"` when the real change is in a nested child node. The underlying number and recommend/don't-recommend decision are both correct (fixed); the *displayed description* just doesn't yet reflect nested-node changes. Logged as a small, separate polish item, not folded into the correctness fix.
+- **~~`Recommendation.observedEffect` can be misleadingly uninformative for join queries~~ — fixed.** New `QueryPlan.describeChange()` diffs the full before/after node-type sequence, not just the root; for the exact scenario that originally exposed this (`"Nested Loop -> Nested Loop"` when the real change was a nested `Seq Scan -> Index Scan`), the description now correctly says so. Re-verified live on that exact query, not just in a unit test.
 - **Single machine, single point in time** — numbers are reproducible in shape, not exact figures.
 
 ### Index-set selection
 - **Greedy, not globally optimal.** Index selection is structurally Set Cover/Knapsack-shaped (NP-hard); greedy marginal-utility is a standard, defensible approximation, not a guarantee.
-- **No storage/count budget constraint** — stops only on marginal-improvement threshold (real index size is now measured and available, just not yet used as a stopping condition).
+- **~~No storage/count budget constraint~~ — added.** New `IndexSetBudget` (max storage bytes and/or max index count) is a real second stopping condition in the greedy loop, checked alongside the existing marginal-improvement threshold — not yet exposed on `AnalyzeWorkloadRequest`/the HTTP API, so it's a real engine capability without a request-level way to set it yet.
 - **"Covered" is binary per query** — no modelling of a second candidate adding incremental value to an already-covered query.
 - **Fixed thresholds** (`MIN_QUERY_IMPROVEMENT_PERCENT = 10.0`, `MIN_MARGINAL_SCORE = 10.0`, impact cutoffs at 50/20) — hardcoded, not tuned beyond this project's own 10 queries, not configurable without a code change.
 
@@ -301,6 +411,7 @@ Organized by category. Each is a deliberate scope boundary or accepted trade-off
 - **~~Identifier interpolation injection risk~~ — fixed, Milestone 14.** Schema allowlist + quoted identifiers; verified with an actual crafted payload.
 - **No logging framework** in application code — `System.out.println` throughout (Spring Boot's own startup/request logging via Logback exists, but isn't used by this project's own classes).
 - **~~No configuration file~~ — partially fixed, Milestone 14.** `application.properties` externalizes the web path's DB config; `Main.java`'s CLI path still reads raw env vars independently — two unreconciled config paths.
+- **~~No hardening against oversized/expensive requests~~ — added.** `ApiLimits` bounds query count (200), generated candidates (150), and per-query SQL length (5,000 chars) on the public API, rejected with a clean 400 before any real database work runs — verified live, an oversized request rejected in 9ms. **Still a real, disclosed gap:** this bounds request *size*, not request *duration* — a compliant-sized workload can still legitimately take real minutes (see `SCALABILITY_BENCHMARK.md`), and there's no wall-clock timeout, async cancellation, or rate-limiting yet.
 - **Not containerized, no CI.**
 - **Only tested locally** — no deployment.
 
@@ -324,11 +435,11 @@ Milestone 11  Recommendation Engine                            ✓ DONE
 Milestone 12  Single-Query Advisor (end-to-end)                 ✓ DONE
 Milestone 13  Workload Advisor (end-to-end)                     ✓ DONE
 Milestone 14  HTTP API (Spring Boot)                             ✓ DONE
-Milestone 15  React Frontend Integration                          ← CURRENT
-Milestone 16  Index Cost / Storage / Write-Overhead Modeling
+Milestone 15  React Frontend Integration                          ✓ DONE (single-query and workload, both live)
+Milestone 16  Index Cost / Storage / Write-Overhead Modeling       ~PARTIAL (storage budget now real; write-overhead still unmeasured)
 ```
 
-**Completion: 89%** (8+2+4+3+6+7+5+3+6+7+12+9+6+10+5, weighted estimate table). Only frontend and cost/storage modeling remain on the original roadmap.
+**Completion: 97%.** Storage cost is now both measured *and* used as an explicit selection budget (`IndexSetBudget`), not just reported — real additional progress on Milestone 16's scope this round. Write-overhead measurement is the one piece of the original roadmap still fully unstarted.
 
 ---
 
@@ -344,28 +455,28 @@ From a comparison against a ChatGPT-suggested priority list, re-ranked here by a
 - ~~JUnit test suite~~ — **done.** 42 tests, 7 classes, 0 failures, one real-DB integration test.
 - ~~`HypoPG`~~ — **done.** Installed, verified, cross-validated against real measurements. Found and fixed a real connection-pinning issue along the way.
 - ~~JOIN support~~ — **done.** Parsing, candidate generation, live-verified against 2 real join queries. Found and fixed a real plan-shape-comparison bug along the way.
+- ~~ORDER BY awareness, existing-index awareness, prefix-domination pruning, AI explanations~~ — **done** (Milestone 15, ported natively from a teammate's C++ backend after a full code-read comparison; see above).
+- ~~React frontend~~ — **done, both analysis modes.** Single-query and workload pages both connected end-to-end to the Java backend, verified live.
+- ~~Wire `WorkloadOptimization.jsx` to `/analyze-workload`~~ — **done**, along with a real query-building UI (preset/custom/quick-add) and the loading spinner that motivated the whole round.
+- ~~Wire `HypoPG` into `WorkloadQueryAdvisor`'s actual selection pipeline~~ — **done**, and honestly benchmarked (~1.2x average, workload-dependent) rather than assumed. See `SCALABILITY_BENCHMARK.md`.
+- ~~Storage/count budget as an explicit stopping condition~~ — **done**, `IndexSetBudget`. Not yet exposed on the HTTP request.
+- ~~Fix `Recommendation.observedEffect` for nested plans~~ — **done**, `QueryPlan.describeChange()`, re-verified live on the original bug's exact query.
+- ~~Hardening against oversized/expensive API requests~~ — **done**, `ApiLimits`. Bounds size, not duration — see the disclosed gap above.
 
 ### Next, ranked easy-to-hard
-1. **Wire `HypoPG` into `WorkloadQueryAdvisor`'s actual selection pipeline** (screen with `HypoIndexEvaluator`, validate only the greedy-chosen finalists with real `IndexEvaluator`) — the mechanism exists and is proven; this is the remaining integration work to make it load-bearing rather than a standalone demonstrated capability.
-2. **Scale up the workload.** Extending `queries.sql` (including the 2 join queries currently only tested ad hoc in `Main.java`) is near-zero code effort; bumping dataset size just re-runs existing populate scripts with a higher row count.
-3. **Fix `Recommendation.observedEffect` for nested plans** — use `QueryPlan.getAllNodeTypes()` (already built for the clamp fix) to describe what actually changed, not just the root node, e.g. surfacing which nested node changed rather than `"Nested Loop -> Nested Loop"`.
-4. **Multi-condition/non-equality JOIN support** — currently only single-condition equi-joins parse; a documented, deliberate scope boundary, not a silent gap.
-5. Selectivity-based composite column ordering (replace alphabetical).
-6. `ORDER BY`/`GROUP BY` awareness in `SqlParser`/`CandidateGenerator`.
-7. Write-overhead measurement (a real benchmark, not just storage size) to make `Recommendation.tradeoffs` fully quantitative.
-8. Storage/count budget as an explicit stopping condition in `WorkloadRecommendationEngine` (the data — real index size — already exists).
-9. Logging framework, unify `Main.java`'s config with `application.properties`, containerize, add CI.
+1. **Scale up the workload.** Extending `queries.sql` (including the 2 join queries currently only tested ad hoc in `Main.java`) is near-zero code effort; bumping dataset size just re-runs existing populate scripts with a higher row count.
+2. **Multi-condition/non-equality JOIN support** — currently only single-condition equi-joins parse; a documented, deliberate scope boundary, not a silent gap.
+3. Selectivity-based composite column ordering (replace alphabetical for filter-only composites).
+4. `GROUP BY`/`HAVING` awareness in `SqlParser`/`CandidateGenerator` (`ORDER BY` now done).
+5. Write-overhead measurement (a real benchmark, not just storage size) to make `Recommendation.tradeoffs` fully quantitative.
+6. Expose `IndexSetBudget` on `AnalyzeWorkloadRequest` — the engine capability exists, the HTTP request shape doesn't carry it yet.
+7. Wall-clock timeouts / async cancellation and rate-limiting on the public API — `ApiLimits` bounds request size, not how long a compliant request is allowed to run.
+8. Logging framework, unify `Main.java`'s config with `application.properties`, containerize, add CI.
 
 ---
 
 ## Immediate Next Task
 
-**Milestone 15: React frontend.**
+**Deployment.** Both frontend and backend are now fully live and demo-ready locally (single-query and workload analysis, spinner-covered async calls, a preset/custom/quick-add workflow that needs no manual file handling), the workload pipeline is HypoPG-screened and budget-aware, and the public API rejects oversized requests before doing real work. What's left is write-overhead cost measurement (the one piece of the original roadmap not yet started) plus the off-roadmap Deployment/Ops work already tracked in `RUNDOWN.html` (Docker, CI, a real hosted URL) — no functional gaps remain in either analysis mode, and engine maturity is no longer the limiting factor.
 
-1. Scaffold a React app (Vite) as a new top-level `frontend/` directory, sibling to `backend/`.
-2. Minimal first screen: textarea for a single query, workload-mode toggle/textarea (one query per line, matching `queries.sql`'s format), "Analyze" button hitting `/analyze` or `/analyze-workload` on `localhost:8080` (CORS needs enabling — `@CrossOrigin` on `AdvisorController` or a `WebMvcConfigurer`, since the dev server runs on a different port).
-3. Render each `Recommendation` as a card using the exact fields already designed: index, impact badge, affected queries, reason, observed effect, estimated improvement, trade-offs.
-4. Plan drill-down (`Query → Before Plan → After Plan`) needs the API to actually return plan JSON — currently `Recommendation` only carries `observedEffect` as a short string. Decide whether to extend `EvaluationResult`/`Recommendation` to carry raw plan JSON, or add it as a separate response field.
-5. Deploy somewhere real once functional — a live URL is worth more than a localhost screenshot for placement purposes.
-
-Connection pooling (HikariCP) is now in place, so a frontend making rapid successive requests is no longer the open risk it was — that gap was closed proactively before this milestone, not discovered by it.
+Also outstanding, not urgent but real: **rotate the Supabase credentials** hardcoded in the teammate's `Server.cpp` (now public on GitHub) — a project-owner action, not something done from this session.
