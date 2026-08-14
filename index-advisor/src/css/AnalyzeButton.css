@@ -1,0 +1,62 @@
+.analyze-button {
+    padding: 14px 28px;
+
+    border: none;
+    border-radius: 8px;
+
+    background-color: #2563eb;
+    color: white;
+
+    font-size: 1rem;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition:
+        background-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.analyze-button:hover {
+    background-color: #1d4ed8;
+    transform: translateY(-1px);
+}
+
+.analyze-button:active {
+    transform: translateY(0);
+}
+
+.analyze-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 10px;
+}
+
+.button-spinner {
+    width: 16px;
+    height: 16px;
+
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top: 2px solid white;
+
+    border-radius: 50%;
+
+    animation: spin 0.8s linear infinite;
+}
+
+.analyze-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.85;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}

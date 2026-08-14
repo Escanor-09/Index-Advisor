@@ -1,0 +1,46 @@
+.analysis-card {
+    background: white;
+
+    margin-top: 30px;
+    padding: 24px;
+
+    border-radius: 12px;
+
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.analysis-card h2 {
+    margin-bottom: 24px;
+
+    font-size: 1.4rem;
+
+    color: #111827;
+}
+
+.analysis-section {
+    margin-bottom: 20px;
+}
+
+.analysis-section h3 {
+    margin-bottom: 10px;
+
+    color: #374151;
+
+    font-size: 1rem;
+}
+
+.analysis-section p {
+    color: #4b5563;
+}
+
+.analysis-section ul {
+    padding-left: 20px;
+}
+
+.analysis-section li {
+    margin-bottom: 6px;
+
+    color: #2563eb;
+
+    font-family: monospace;
+}

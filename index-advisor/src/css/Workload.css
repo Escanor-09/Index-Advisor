@@ -1,0 +1,20 @@
+.workload-page {
+    max-width: 1000px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+.workload-page h1 {
+    margin-bottom: 10px;
+}
+
+.workload-page>p {
+    color: #6b7280;
+    margin-bottom: 20px;
+}
+
+.selected-file {
+    margin-top: 12px;
+    font-weight: 500;
+    color: #111827;
+}
