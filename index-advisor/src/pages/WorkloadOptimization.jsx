@@ -125,7 +125,7 @@ function WorkloadOptimization() {
         setResult(null);
 
         try {
-            const response = await axios.post("http://localhost:8080/analyze-workload", { queries });
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/analyze-workload`, { queries });
             setResult(response.data);
         } catch (error) {
             console.error(error);

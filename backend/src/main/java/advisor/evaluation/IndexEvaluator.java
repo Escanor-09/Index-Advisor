@@ -69,10 +69,10 @@ public class IndexEvaluator {
     private void assertSafeDatabase() {
         String currentDb = db.executeScalar("SELECT current_database();");
 
-        if (!"index_advisor".equals(currentDb)) {
+        if (!"ecom_test".equals(currentDb)) {
             throw new IllegalStateException(
                 "Refusing to run index experiments against database '" + currentDb + "'. "
-                    + "IndexEvaluator only runs on the local 'index_advisor' sandbox, "
+                    + "IndexEvaluator only runs on the 'ecom_test' sandbox copy, "
                     + "never the shared Supabase 'ecom' database."
             );
         }

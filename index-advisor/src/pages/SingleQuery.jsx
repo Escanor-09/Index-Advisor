@@ -46,12 +46,12 @@ function SingleQuery() {
         setResult(null);
 
         try {
-            const response = await axios.post("http://localhost:8080/analyze", { query: query, });
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/analyze`, { query: query, });
             setResult(response.data);
             setAiLoading(true);
             setReasoning(["Generating AI explanation...."]);
 
-            axios.post("http://localhost:8080/generate-explanation", {
+            axios.post(`${import.meta.env.VITE_API_URL}/generate-explanation`, {
                 query: query,
                 bestIndex: response.data.bestIndex,
                 improvementPercent: response.data.improvement,
