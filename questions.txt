@@ -1,0 +1,8 @@
+1. I still do not understand, why we needed a separate orchestrator, when we could have used Main to call allthe components. What did you mean when you said, "Then another interface can eventually call: advisor.analyze(sql) without knowing the internals."
+2. What is the meaning of dependency injection? What is partial dependency injection? Explain this sentence, "It is partial dependency injection, but not full constructor injection throughout the graph."
+3. What does this mean? "PostgresManager is supplied from outside: new QueryAdvisor(db) So the database dependency isn't created inside QueryAdvisor." How is this happening? What does outside mean? What is this database dependency?
+Why is this design = "public QueryAdvisor(IndexEvaluator evaluator) {
+    this.evaluator = evaluator;
+}" more decoupled than? QueryAdvisor creating it's own IndexEvaluator(db)
+4. What is this? "composition root -> construct dependencies -> QueryAdvisor"
+5. How could one inject a fake evaluator in this?

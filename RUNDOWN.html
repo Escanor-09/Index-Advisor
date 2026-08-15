@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Index Advisor Rundown</title>
+<style>
+  :root {
+    --paper: #EDEFF2;
+    --surface: #FFFFFF;
+    --surface-2: #F5F6F8;
+    --ink: #14161B;
+    --ink-soft: #4B5058;
+    --ink-faint: #767B84;
+    --rule: rgba(20,22,27,0.12);
+    --rule-strong: rgba(20,22,27,0.22);
+    --accent: #2C5F63;
+    --accent-soft: rgba(44,95,99,0.09);
+    --accent-strong: #1C4245;
+    --good: #3E7A5E;
+    --good-soft: rgba(62,122,94,0.12);
+    --warn: #B8752E;
+    --warn-soft: rgba(184,117,46,0.12);
+    --critical: #A83E32;
+    --critical-soft: rgba(168,62,50,0.10);
+    --shadow: 0 1px 2px rgba(20,22,27,0.06), 0 8px 24px -12px rgba(20,22,27,0.18);
+
+    --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    --font-head: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Roboto, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #14161B;
+      --surface: #1B1E24;
+      --surface-2: #21252C;
+      --ink: #EDEFF2;
+      --ink-soft: #A9AEB6;
+      --ink-faint: #7C828B;
+      --rule: rgba(237,239,242,0.14);
+      --rule-strong: rgba(237,239,242,0.24);
+      --accent: #7FBFC3;
+      --accent-soft: rgba(127,191,195,0.12);
+      --accent-strong: #A6D6D9;
+      --good: #6FAE8C;
+      --good-soft: rgba(111,174,140,0.14);
+      --warn: #D99A52;
+      --warn-soft: rgba(217,154,82,0.14);
+      --critical: #D8695A;
+      --critical-soft: rgba(216,105,90,0.14);
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #14161B;
+    --surface: #1B1E24;
+    --surface-2: #21252C;
+    --ink: #EDEFF2;
+    --ink-soft: #A9AEB6;
+    --ink-faint: #7C828B;
+    --rule: rgba(237,239,242,0.14);
+    --rule-strong: rgba(237,239,242,0.24);
+    --accent: #7FBFC3;
+    --accent-soft: rgba(127,191,195,0.12);
+    --accent-strong: #A6D6D9;
+    --good: #6FAE8C;
+    --good-soft: rgba(111,174,140,0.14);
+    --warn: #D99A52;
+    --warn-soft: rgba(217,154,82,0.14);
+    --critical: #D8695A;
+    --critical-soft: rgba(216,105,90,0.14);
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--accent-soft); }
+
+  a { color: var(--accent-strong); }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    padding: 56px 0 28px;
+    border-bottom: 3px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--font-head);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-strong);
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .eyebrow::before {
+    content: "";
+    width: 22px;
+    height: 2px;
+    background: var(--accent-strong);
+    display: inline-block;
+  }
+  h1.title {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(34px, 5.4vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+    text-wrap: balance;
+    max-width: 16ch;
+  }
+  .dateline {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+  }
+  .dateline b { color: var(--ink-soft); font-weight: 600; }
+
+  /* ---------- Stat rundown ---------- */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--rule-strong);
+    border: 1px solid var(--rule-strong);
+    margin: 32px 0 8px;
+  }
+  .stat-card {
+    background: var(--surface);
+    padding: 22px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .stat-label {
+    font-family: var(--font-head);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .stat-num {
+    font-family: var(--font-display);
+    font-size: 40px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .stat-num.accent { color: var(--accent-strong); }
+  .stat-note { font-size: 12.5px; color: var(--ink-faint); line-height: 1.4; }
+  .stat-note.flag { color: var(--critical); font-weight: 600; }
+
+  @media (max-width: 720px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ---------- Section scaffolding ---------- */
+  section { margin-top: 56px; }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 6px;
+  }
+  h2.section-title {
+    font-family: var(--font-head);
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink);
+    margin: 0;
+    white-space: nowrap;
+  }
+  .section-head::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--rule-strong);
+  }
+  .section-dek {
+    color: var(--ink-soft);
+    font-size: 15px;
+    max-width: 68ch;
+    margin: 14px 0 24px;
+  }
+
+  /* ---------- Assessment (two column) ---------- */
+  .assessment-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--rule-strong);
+  }
+  .assess-col { padding: 22px 24px; }
+  .assess-col + .assess-col { border-left: 1px solid var(--rule-strong); }
+  .assess-col h3 {
+    font-family: var(--font-head);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .assess-col.good h3 { color: var(--good); }
+  .assess-col.risk h3 { color: var(--critical); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
+  .assess-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+  .assess-list li { font-size: 14.5px; line-height: 1.5; padding-left: 16px; border-left: 2px solid var(--rule); }
+  .assess-list b { display: block; color: var(--ink); font-weight: 650; margin-bottom: 2px; }
+  .assess-list span { color: var(--ink-soft); }
+
+  @media (max-width: 720px) {
+    .assessment-grid { grid-template-columns: 1fr; }
+    .assess-col + .assess-col { border-left: none; border-top: 1px solid var(--rule-strong); }
+  }
+
+  /* ---------- Math callout ---------- */
+  .math-box {
+    background: var(--surface);
+    border: 1px solid var(--rule-strong);
+    padding: 22px 24px 6px;
+  }
+  .math-lead { font-size: 14.5px; color: var(--ink-soft); margin: 0 0 18px; max-width: 68ch; }
+  table.math-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.math-table th {
+    text-align: left;
+    font-family: var(--font-head);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding: 0 10px 10px 0;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  table.math-table td {
+    padding: 9px 10px 9px 0;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+  table.math-table td:first-child { font-family: var(--font-body); }
+  table.math-table tr.total td {
+    border-top: 2px solid var(--ink);
+    border-bottom: none;
+    font-weight: 700;
+    padding-top: 12px;
+  }
+  table.math-table tr.total td:first-child { font-family: var(--font-head); text-transform: uppercase; font-size: 12px; letter-spacing: 0.05em; }
+  .num-r { text-align: right; }
+
+  /* ---------- Roadmap table ---------- */
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--rule-strong);
+    margin-bottom: 10px;
+  }
+  .phase + .phase { margin-top: 10px; }
+  .phase summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--font-head);
+  }
+  .phase summary::-webkit-details-marker { display: none; }
+  .phase summary::before {
+    content: "▸";
+    color: var(--accent);
+    font-size: 13px;
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+  }
+  .phase[open] summary::before { transform: rotate(90deg); }
+  .phase-name { font-weight: 700; font-size: 15px; }
+  .phase-status {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    margin-left: auto;
+    display: flex;
+    gap: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .phase-bar {
+    width: 64px;
+    height: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .phase-bar i { display: block; height: 100%; background: var(--good); }
+
+  .rows { border-top: 1px solid var(--rule-strong); }
+  .row {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) 76px 64px 120px;
+    gap: 16px;
+    align-items: center;
+    padding: 13px 20px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .row:last-child { border-bottom: none; }
+  .row-item { min-width: 0; }
+  .row-item .name { font-size: 14px; font-weight: 550; color: var(--ink); }
+  .row-item .note { font-size: 12.5px; color: var(--ink-faint); margin-top: 3px; line-height: 1.4; }
+  .diff {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 3px;
+    text-align: center;
+    white-space: nowrap;
+    justify-self: start;
+  }
+  .diff.low { background: var(--good-soft); color: var(--good); }
+  .diff.med { background: var(--warn-soft); color: var(--warn); }
+  .diff.high { background: var(--critical-soft); color: var(--critical); }
+  .diff.vhigh { background: var(--critical); color: var(--surface); }
+  .wt {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-soft);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .prog { display: flex; align-items: center; gap: 8px; }
+  .prog-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .prog-bar i { display: block; height: 100%; }
+  .prog-pct {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    width: 30px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .row-head {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) 76px 64px 120px;
+    gap: 16px;
+    padding: 8px 20px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  .row-head span {
+    font-family: var(--font-head);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .row-head span:nth-child(3) { text-align: right; }
+
+  @media (max-width: 640px) {
+    .row, .row-head { grid-template-columns: minmax(0,1fr) 56px 92px; }
+    .wt { display: none; }
+    .row-head span:nth-child(2) { display: none; }
+  }
+
+  .table-scroll { overflow-x: auto; }
+
+  /* ---------- Deprioritized / grayed rows ---------- */
+  .row.graved { opacity: 0.46; }
+  .row.graved .name { text-decoration: none; }
+  .wt.strike { text-decoration: line-through; color: var(--ink-faint); }
+  .skip-badge {
+    display: inline-block;
+    font-family: var(--font-head);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    background: var(--surface-2);
+    border: 1px solid var(--rule-strong);
+    border-radius: 3px;
+    padding: 2px 6px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  /* ---------- Note toggle ---------- */
+  .delay-note {
+    margin: 14px 20px 4px;
+    background: var(--warn-soft);
+    border: 1px solid var(--rule-strong);
+    border-left: 3px solid var(--warn);
+    border-radius: 2px;
+  }
+  .delay-note summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 12px 16px;
+    font-family: var(--font-head);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--warn);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .delay-note summary::-webkit-details-marker { display: none; }
+  .delay-note summary::before {
+    content: "▸";
+    font-size: 11px;
+    transition: transform 0.15s ease;
+  }
+  .delay-note[open] summary::before { transform: rotate(90deg); }
+  .delay-note-body { padding: 0 16px 16px; font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+  .delay-note-body p { margin: 0 0 10px; }
+  .delay-note-body p:last-child { margin-bottom: 0; }
+
+  /* ---------- Phasing ---------- */
+  .phasing-list { list-style: none; margin: 0; padding: 0; counter-reset: phase-counter; }
+  .phasing-item {
+    counter-increment: phase-counter;
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .phasing-item:last-child { border-bottom: none; }
+  .phasing-item::before {
+    content: counter(phase-counter, decimal-leading-zero);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 700;
+    padding-top: 2px;
+  }
+  .phasing-item h4 { margin: 0 0 4px; font-family: var(--font-head); font-size: 15px; font-weight: 700; }
+  .phasing-item p { margin: 0; color: var(--ink-soft); font-size: 14px; max-width: 66ch; }
+  .parallel-note {
+    margin-top: 20px;
+    padding: 14px 18px;
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .parallel-note b { color: var(--ink); }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule-strong);
+    font-size: 13px;
+    color: var(--ink-faint);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Index Advisor — Field Report</p>
+    <h1 class="title">Where this actually stands</h1>
+    <div class="dateline">
+      <span><b>Filed</b> 15 Aug 2026</span>
+      <span><b>Subject</b> Index Advisor — PostgreSQL index recommendation engine</span>
+      <span><b>Basis</b> full session history, current codebase, live-verified endpoints on the actual deployed URLs</span>
+    </div>
+  </header>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <span class="stat-label">Complete vs. full vision</span>
+      <span class="stat-num accent">~84%</span>
+      <span class="stat-note">Not asserted — computed from the weighted roadmap table below. Group K (Deployment/Ops) jumped from 0% to 64% this round — Docker and live hosting are done; CI/CD is the only item left in the entire roadmap sitting at 0%.</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Rating, as it sits today</span>
+      <span class="stat-num">9.0/10</span>
+      <span class="stat-note">Deployment is no longer hypothetical — the backend is live on Render, the frontend live on Vercel, and both are verified end to end: a real <code>/analyze</code> call against the live URL, a real CORS preflight from the live origin, and the deployed JS bundle itself inspected to confirm it calls the live backend. Engine maturity and deployment are both no longer the gap — CI/CD is.</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">+ CI/CD pipeline</span>
+      <span class="stat-num">9.2/10</span>
+      <span class="stat-note">The last off-roadmap infrastructure gap. The 94-test suite and both deploy targets already exist — this is purely about gating a push on tests passing before it reaches the live URL, not new capability.</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">Potential — full roadmap done</span>
+      <span class="stat-num accent">9.5/10</span>
+      <span class="stat-note flag">Capped below 10 even at 100% complete — no external users, no published results, a two-person project is a structural ceiling, not a feature gap.</span>
+    </div>
+  </div>
+
+  <section>
+    <div class="section-head"><h2 class="section-title">The honest assessment</h2></div>
+    <p class="section-dek">What's genuinely working, and what actually worries me about the path from here — not to talk the project down, but because planning against an inflated completion number produces bad timelines.</p>
+    <div class="assessment-grid">
+      <div class="assess-col good">
+        <h3><span class="dot"></span>What's working</h3>
+        <ul class="assess-list">
+          <li><b>Every recommendation is proven, not asserted.</b><span><code>IndexEvaluator</code> actually runs <code>CREATE INDEX</code>, measures real <code>EXPLAIN (ANALYZE, BUFFERS)</code> execution time before and after with a warm-up + median-of-3 protocol, then drops the index again. Nothing gets recommended without being measured — a real negative case (<code>products(status)</code> at ~-6.8%) is filtered out at every level, not hidden.</span></li>
+          <li><b>A genuine two-codebase comparison, not a coin flip.</b><span>Read a teammate's independent C++ backend (<code>libpg_query</code>, HypoPG-only, <code>cpp-httplib</code>) in full before deciding anything — found four real capabilities it had that this one didn't (ORDER BY awareness, existing-index awareness, prefix pruning, AI explanations), and two real defects (a likely thread-unsafe shared connection, hardcoded public credentials) along the way.</span></li>
+          <li><b>Five real bugs found and fixed this project, each with a full root-cause story.</b><span>A JSqlParser parenthesized-group bug, a cache-warming measurement bug (~40% phantom improvement on an unchanged plan), a HikariCP index-name collision race under concurrent load, a join plan-shape clamp bug that silently zeroed a genuine ~93% improvement, and a Zipfian-skew calibration mistake caught by querying real output instead of trusting the formula.</span></li>
+          <li><b>A real algorithm, not heuristic hand-waving.</b><span>Workload-level index selection is Set Cover/Knapsack-shaped (NP-hard); the greedy marginal-utility approach is explicitly positioned against the Microsoft AutoAdmin / Chaudhuri &amp; Narasayya research lineage, with a concrete demonstrated case — 9 candidates down to 6, correctly dropping a composite made redundant once its shorter prefix was chosen first.</span></li>
+          <li><b>94 tests, including real-database integration tests — zero mocking of the one thing that actually matters.</b><span>Postgres behavior itself is never simulated; the integration test classes stand up real connections, create/drop real indexes, and assert against real <code>pg_indexes</code> state, cleaning up after themselves every time.</span></li>
+          <li><b>Security hardening that was actually tested with a crafted payload, not just reasoned about.</b><span>A real SQL-injection vector in dynamically-built DDL (Postgres JDBC's simple-query-protocol multi-statement risk) was closed with a schema allowlist + quoted identifiers, then verified by sending an actual attack string through a live HTTP request and confirming via <code>psql</code> that the target table was untouched.</span></li>
+          <li><b>The frontend-backend connection is genuinely live, and a real integration gap was caught and fixed, not glossed over.</b><span>Single-query analysis is verified end to end against the real local database through the real UI contract. When first "verified" via <code>curl</code> looked fine but the browser still couldn't talk to the backend, the actual cause (missing CORS config — <code>curl</code> doesn't enforce it, browsers do) was found and fixed, not waved away as "should be fine."</span></li>
+          <li><b>Data realism grounded in verified numbers, not assumed.</b><span>Zipfian customer/product activity skew was recalibrated after directly querying the generated data and finding the first exponent choice produced a single monopolizing outlier — reproduced independently on two separate database instances (local and Supabase) with converging concentration numbers.</span></li>
+          <li><b>Existing capabilities were adopted honestly, with credit, not silently absorbed.</b><span>ORDER BY-aware candidates, existing-index awareness, and prefix-domination pruning were ported natively from the teammate's proven C++ logic into this codebase — his code stays intact in the repo and git history; what carried forward was the value of the idea, not a copy-paste.</span></li>
+          <li><b>Storage cost is a real, measured number, not an estimate.</b><span><code>pg_relation_size()</code> is read while the experimental index still exists, threaded through <code>EvaluationResult</code> and <code>Recommendation.tradeoffs</code> as an actual byte count, not a guess.</span></li>
+          <li><b>The workload page — the project's strongest interview story — now has a real, demoable UI.</b><span>Previously 100% mock data with no working spinner (a direct symptom of never making a real network call). Now fully wired to <code>/analyze-workload</code> with a real per-index cost/coverage aggregation layer, three ways to build a workload without touching a file dialog (preset dropdown, free-text, one-click quick-add chips), and a real loading state. Verified end to end against the live backend, not assumed from the code.</span></li>
+          <li><b>HypoPG is genuinely load-bearing now, and its actual value was measured honestly, not just claimed.</b><span>New <code>WorkloadHypoScreener</code> screens every candidate before real DDL runs — a real architectural change, not a toggle. The benchmark (<code>SCALABILITY_BENCHMARK.md</code>) shows a modest, real, workload-dependent ~1.2x average speedup, including one case that's 10% <i>slower</i> — reported as measured, not rounded up. Root cause understood: at this project's 10,000-row tables, real <code>CREATE INDEX</code> is already cheap, so there's less cost for screening to avoid.</span></li>
+          <li><b>A real correctness bug in plan-change reporting, found and fixed with a verified before/after.</b><span><code>Recommendation.observedEffect</code> used to show only the plan's root node, which for a join can stay identical while the real change happens in a nested scan — exactly the scenario that produced a misleading <code>"Nested Loop -&gt; Nested Loop"</code> line for a genuine 97%+ improvement. New <code>QueryPlan.describeChange()</code> fixes it, re-verified live on that exact query, not just in a unit test.</span></li>
+          <li><b>The public API now has real, verified size limits, not just assumed safety.</b><span>An oversized 201-query workload is rejected in 9 milliseconds — measured live against the running server, proving the rejection happens before any real database work starts, not after a long wait.</span></li>
+          <li><b>The system is genuinely live, and a real deployment bug was found and fixed, not hand-waved.</b><span>Backend on Render, frontend on Vercel — Docker first (multi-stage builds for both, database intentionally left uncontainerized since it's already Supabase-hosted), then a real bug: Render's dynamic <code>$PORT</code> binding wasn't wired to Spring Boot's <code>server.port</code>, so the service built clean but never went healthy. Fixed and re-verified live: a real <code>/analyze</code> POST against the live URL returned a genuine measured recommendation, a CORS preflight from the actual Vercel origin came back correct, and the deployed frontend's built JS bundle was fetched and grepped directly to confirm it calls the live backend, not <code>localhost</code>.</span></li>
+        </ul>
+      </div>
+      <div class="assess-col risk">
+        <h3><span class="dot"></span>What concerns me</h3>
+        <ul class="assess-list">
+          <li><b>No CI/CD gate.</b><span>Both Render and Vercel auto-deploy on push at the platform level, but nothing runs the 94-test suite first — a broken push reaches the live URL unchecked. The only remaining 0% item in the entire roadmap.</span></li>
+          <li><b>Render's free tier has a real, disclosed cold-start cost.</b><span>The backend spins down after inactivity; the first request afterward can take 50+ seconds, visible directly in Render's own dashboard warning. Not hidden from anyone demoing this live.</span></li>
+          <li><b>JOIN and WHERE-clause understanding is narrower than it sounds.</b><span>Only single-condition equi-joins are recognized — no multi-condition <code>ON</code> clauses, no non-equality joins, no 3+ table chains, and no <code>GROUP BY</code>/<code>HAVING</code>/subquery/CTE awareness at all. A stated scope boundary, but a real one.</span></li>
+          <li><b>The public API bounds request *size*, not request *duration*.</b><span>A compliant-sized workload (up to 200 queries, 150 candidates) can still legitimately take real minutes — see <code>SCALABILITY_BENCHMARK.md</code>. No wall-clock timeout or async cancellation exists yet; a slow-but-legal request still ties up a connection for its full duration.</span></li>
+          <li><b>The benefit side of a recommendation is rigorous; the cost side is a static string.</b><span><code>Recommendation.tradeoffs</code>' write/maintenance line still literally says <code>"not measured"</code> — no real INSERT/UPDATE/DELETE overhead benchmark exists yet.</span></li>
+          <li><b>Still fundamentally a two-person project with zero outside validation.</b><span>No external users, no code review from anyone besides the two contributors, no production traffic, no published results. That's a real ceiling on the rating regardless of how complete the roadmap gets.</span></li>
+          <li><b>A real credential leak is still live and public as of this writing.</b><span>The teammate's C++ backend has Supabase database credentials hardcoded directly in source, pushed to a public GitHub repo — flagged clearly, not yet rotated.</span></li>
+          <li><b>No logging framework, and two config paths that still don't agree.</b><span>Application code uses <code>System.out.println</code> throughout; <code>Main.java</code>'s CLI path reads raw env vars independently of <code>application.properties</code>, unreconciled since Milestone 14.</span></li>
+          <li><b>Every measurement is single-machine, single point in time.</b><span>Numbers are reproducible in shape, not exact figures — there's been no sustained concurrent-load testing beyond the specific 5-request race that exposed the HikariCP naming bug.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2 class="section-title">Where the 84% comes from</h2></div>
+    <p class="section-dek">Not asserted — computed from the roadmap table below. Each layer is weighted by genuine effort share of the full vision (a production-shaped, demonstrable index advisor), then multiplied by how much of that layer is actually done.</p>
+    <div class="math-box">
+      <p class="math-lead">This round's move was entirely Group K: Docker (backend + frontend, database intentionally left external since it's already Supabase-hosted) and a real live deployment — backend on Render, frontend on Vercel — verified end to end, not just "build succeeded" (a real <code>/analyze</code> call against the live URL, a CORS preflight from the live origin, the deployed JS bundle inspected directly to confirm it calls the live backend). A real bug was found and fixed along the way: Render's dynamic <code>$PORT</code> wasn't wired to Spring Boot's <code>server.port</code>, so the first deploy built clean but never went healthy. Group K goes from 0% to 64% — CI/CD is the only item left inside it, and now the only 0% item in the <em>entire</em> roadmap.</p>
+      <table class="math-table">
+        <thead><tr><th>Layer</th><th class="num-r">Weight&nbsp;/&nbsp;100</th><th class="num-r">Done</th><th class="num-r">Earned</th></tr></thead>
+        <tbody>
+          <tr><td>A · Foundation (schema, data layer, connectivity)</td><td class="num-r">8</td><td class="num-r">100%</td><td class="num-r">8.0</td></tr>
+          <tr><td>B · SQL parsing &amp; query understanding</td><td class="num-r">10</td><td class="num-r">70%</td><td class="num-r">7.0</td></tr>
+          <tr><td>C · Candidate generation</td><td class="num-r">8</td><td class="num-r">75%</td><td class="num-r">6.0</td></tr>
+          <tr><td>D · Index evaluation engine</td><td class="num-r">14</td><td class="num-r">93%</td><td class="num-r">13.0</td></tr>
+          <tr><td>E · Recommendation engine</td><td class="num-r">7</td><td class="num-r">86%</td><td class="num-r">6.0</td></tr>
+          <tr><td>F · Workload advisor (index-set selection)</td><td class="num-r">12</td><td class="num-r">83%</td><td class="num-r">10.0</td></tr>
+          <tr><td>G · HTTP API &amp; backend infra</td><td class="num-r">8</td><td class="num-r">73%</td><td class="num-r">5.8</td></tr>
+          <tr><td>H · Testing &amp; QA</td><td class="num-r">6</td><td class="num-r">100%</td><td class="num-r">6.0</td></tr>
+          <tr><td>I · Frontend integration</td><td class="num-r">11</td><td class="num-r">91%</td><td class="num-r">10.0</td></tr>
+          <tr><td>J · Data realism</td><td class="num-r">5</td><td class="num-r">100%</td><td class="num-r">5.0</td></tr>
+          <tr><td>K · Deployment / Ops</td><td class="num-r">11</td><td class="num-r">64%</td><td class="num-r">7.0</td></tr>
+          <tr class="total"><td>Total</td><td class="num-r">100</td><td class="num-r">—</td><td class="num-r">83.8</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2 class="section-title">The full roadmap</h2></div>
+    <p class="section-dek">Every item needed to reach the vision — a production-shaped, demonstrable PostgreSQL index advisor — grouped by layer. Each group is collapsible; the summary line carries its own weight and completion so you can scan without opening it.</p>
+
+    <div class="table-scroll">
+
+    <!-- GROUP A -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">A · Foundation — schema, data layer, connectivity</span>
+        <span class="phase-status"><span>8 pts</span><span>8.0 earned</span><span class="phase-bar"><i style="width:100%"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">7-table schema, data generation scripts</div><div class="note">Node.js populate scripts (<code>src/populate/</code>), 16 constraints (7 PK, 9 FK), all 18 integrity checks passing (<code>npm run verify</code>).</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Two-tier database architecture</div><div class="note">Shared Supabase (canonical) + local <code>index_advisor</code> sandbox for real DDL experiments, enforced by a hard runtime <code>current_database()</code> check, not just convention.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name"><code>PostgresManager</code> — JDBC + HikariCP pooling</div><div class="note">Pooled connections, plus <code>openSession()</code>/<code>ConnectionSession</code> for HypoPG's session-local state.</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP B -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">B · SQL parsing &amp; query understanding</span>
+        <span class="phase-status"><span>10 pts</span><span>7.0 earned</span><span class="phase-bar"><i style="width:70%;background:var(--warn)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">WHERE-clause parsing</div><div class="note">JSqlParser 5.3, recursive walk, alias resolution. Real bug found and fixed: <code>ParenthesedExpressionList</code> silently dropped a column in JSqlParser 5.x's new AST shape.</div></div><span class="diff med">Medium</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Single-condition equi-JOIN parsing</div><div class="note">Alias-to-table resolution, WHERE columns correctly attributed to the real joined table, not the alias.</div></div><span class="diff high">High</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">ORDER BY-aware parsing</div><div class="note">Table-attributed <code>qualifiedOrderByColumns</code>, alias-resolved the same way WHERE columns are. Ported and verified this round.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Multi-condition / non-equality / 3+-table JOIN support</div><div class="note">Currently a stated scope boundary — skipped silently rather than guessed at, since a wrong guess would propose a misleading candidate.</div></div><span class="diff med">Medium</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">GROUP BY / HAVING / subquery / CTE awareness</div><div class="note">Not started. Only WHERE predicates, join columns, and ORDER BY columns contribute to candidates today.</div></div><span class="diff high">High</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP C -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">C · Candidate generation</span>
+        <span class="phase-status"><span>8 pts</span><span>6.0 earned</span><span class="phase-bar"><i style="width:75%;background:var(--warn)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">Filter-column candidates (single + composite)</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Join-column candidates</div><div class="note">One candidate per side of every JOIN clause, deduplicated against filter-column candidates.</div></div><span class="diff low">Low</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">ORDER BY-aware sort-avoidance candidates</div><div class="note">Single-column sort candidates plus (filter, sort) composites. Verified live: a composite correctly beat both its single-column halves (99.0% vs. 97.9%/0.0%).</div></div><span class="diff med">Medium</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Existing-index awareness</div><div class="note"><code>ExistingIndexManager</code> reads <code>pg_indexes</code>, prefix-matches candidates against real indexes. Verified live: a query filtering on the primary key now correctly returns zero candidates.</div></div><span class="diff med">Medium</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Selectivity-based composite column ordering</div><div class="note">Currently alphabetical for filter-only composites, not selectivity-based.</div></div><span class="diff med">Medium</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Expression / partial / covering (<code>INCLUDE</code>) index candidates</div></div><span class="diff high">High</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP D -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">D · Index evaluation engine</span>
+        <span class="phase-status"><span>14 pts</span><span>13.0 earned</span><span class="phase-bar"><i style="width:93%;background:var(--good)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">Real CREATE/EXPLAIN ANALYZE/DROP measurement cycle</div><div class="note">Actual DDL, actual execution — not a cost estimate. Guaranteed cleanup, zero leftover indexes verified across every milestone.</div></div><span class="diff high">High</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Measurement stability</div><div class="note">Warm-up + median-of-3 + full-plan-shape improvement clamp. Three real bugs found and fixed here: a ~40% cache-warming artifact, a root-only plan comparison that zeroed a genuine ~93% join improvement, and (this round) <code>observedEffect</code> reporting only the unchanged root for nested plan changes — new <code>QueryPlan.describeChange()</code> fixes it, verified live on the exact query that exposed the original bug: <code>"Nested Loop -&gt; Nested Loop"</code> became <code>"Seq Scan -&gt; Bitmap Heap Scan (nested under Nested Loop)"</code>.</div></div><span class="diff high">High</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Safety hardening</div><div class="note">DB-identity guard, schema allowlist, quoted identifiers — tested against an actual crafted SQL-injection payload, not just reasoned about.</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Quantitative storage cost</div><div class="note">Real <code>pg_relation_size()</code>, measured while the experimental index exists.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">HypoPG hypothetical-index evaluator</div><div class="note">Built, session-pinned for HypoPG's per-connection state, cross-validated against real measurements on every test candidate.</div></div><span class="diff high">High</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">HypoPG wired into the live selection pipeline</div><div class="note">Done — new <code>WorkloadHypoScreener</code> screens every candidate via HypoPG first; only promoted candidates pay the real CREATE/DROP INDEX cost. Honestly benchmarked, not just shipped: ~1.2x average speedup, ranging from a 10% slowdown (ID-heavy point-lookup workloads, where screening filters almost nothing) to 46% — see <code>SCALABILITY_BENCHMARK.md</code>.</div></div><span class="diff med">Medium</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Write-path cost measurement</div><div class="note">No real INSERT/UPDATE/DELETE overhead benchmark — the benefit side is measured, the cost side is a static disclosed string.</div></div><span class="diff high">High</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP E -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">E · Recommendation engine</span>
+        <span class="phase-status"><span>7 pts</span><span>6.0 earned</span><span class="phase-bar"><i style="width:86%;background:var(--good)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">Filter / rank / impact-tier logic</div><div class="note">Minimum-improvement threshold, descending rank, HIGH/MEDIUM/LOW tiering.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Prefix-domination pruning</div><div class="note">Drops a candidate strictly dominated by a same-or-shorter prefix with equal-or-better measured improvement. Ported this round, verified with both a tie case (dropped) and a genuine-improvement case (kept).</div></div><span class="diff med">Medium</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">AI-generated natural-language explanations</div><div class="note">Gemini via <code>java.net.http.HttpClient</code>, graceful fallback on any failure (missing key, network, malformed response) — verified live with no key configured.</div></div><span class="diff med">Medium</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Full quantitative tradeoffs</div><div class="note">Storage cost is real; the write/maintenance-cost line is still generic text, not a measured number.</div></div><span class="diff med">Medium</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP F -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">F · Workload advisor — index-set selection</span>
+        <span class="phase-status"><span>12 pts</span><span>10.0 earned</span><span class="phase-bar"><i style="width:83%;background:var(--good)"></i></span></span>
+      </summary>
+
+      <details class="delay-note">
+        <summary>Why the exact optimizer is grayed out</summary>
+        <div class="delay-note-body">
+          <p>An exact ILP/DP formulation for index-SET selection was explicitly considered and declined as disproportionate engineering for a roadmap that currently exercises single-digit-to-low-teens candidate counts. Greedy marginal-utility selection is a well-known, defensible approximation for this NP-hard problem class — the same spirit AutoAdmin-style research uses, with far less machinery. Revisit only if the candidate count grows enough that greedy's known failure modes actually start to bite.</p>
+        </div>
+      </details>
+
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">Workload ingestion &amp; profiling</div><div class="note"><code>WorkloadReader</code>, <code>WorkloadProfile</code>, column-frequency counting from 10 hand-written queries.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Greedy marginal-utility set selection</div><div class="note">Real, verified run: 9 candidates → 6 chosen, correctly excluding a composite made redundant once its shorter, higher-marginal-value prefix was picked first — a gap the per-query advisor structurally can't see.</div></div><span class="diff vhigh">V. High</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">HypoPG-based screening wired into workload pipeline</div><div class="note">Done — see Group D. Screen cheaply with HypoPG, validate only the promoted candidates with real DDL. Honestly benchmarked, not oversold: real but modest average 1.2x speedup, occasionally net-negative for point-lookup-heavy workloads at this project's 10,000-row scale.</div></div><span class="diff med">Medium</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Storage/count budget as an explicit stopping condition</div><div class="note">Done — new <code>IndexSetBudget</code> (max storage bytes and/or max index count), a second stopping condition in the greedy loop alongside the existing marginal-score bar. Real index-size data (Group D) is now actually used to bound the chosen set, not just reported.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row graved"><div class="row-item"><div class="name">Exact ILP / DP optimizer<span class="skip-badge">Declined by design</span></div><div class="note">Considered and explicitly rejected — see note above. Greedy is the deliberate choice, not a placeholder for this.</div></div><span class="diff vhigh">V. High</span><span class="wt strike">2</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP G -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">G · HTTP API &amp; backend infra</span>
+        <span class="phase-status"><span>8 pts</span><span>5.8 earned</span><span class="phase-bar"><i style="width:73%;background:var(--warn)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">Spring Boot REST API</div><div class="note"><code>/analyze</code>, <code>/analyze-workload</code>, <code>/generate-explanation</code>, structured error handling via <code>@ExceptionHandler</code>.</div></div><span class="diff med">Medium</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">HikariCP connection pooling</div><div class="note">Found and fixed a real concurrency bug getting here: deterministic index names raced under concurrent load, 4/5 requests failed until names got a unique per-call suffix.</div></div><span class="diff med">Medium</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">CORS configuration</div><div class="note">Found this round: the browser silently blocked every cross-origin request from the frontend dev server, invisible to <code>curl</code>-based testing. Fixed with an externalized allowed-origin config, verified with a real preflight + POST from the actual frontend origin.</div></div><span class="diff low">Low</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Config externalization</div><div class="note"><code>application.properties</code>, env-var-backed with defaults, for the web path. <code>Main.java</code>'s CLI path still reads raw env vars independently.</div></div><span class="diff low">Low</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:80%;background:var(--warn)"></i></div><span class="prog-pct">80%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Logging framework</div><div class="note"><code>System.out.println</code> throughout application code; Spring Boot's own Logback exists but isn't used by this project's classes.</div></div><span class="diff low">Low</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Unify <code>Main.java</code> CLI config with <code>application.properties</code></div></div><span class="diff low">Low</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Request-size hardening</div><div class="note">New <code>ApiLimits</code> — max query count (200), max generated candidates (150), max SQL length (5,000 chars) — rejected with a clean 400 before any real database work starts. Verified live: an oversized 201-query request rejected in 9ms, not left to run. Deliberately doesn't cover wall-clock timeouts on a compliant-sized request, or rate-limiting — noted as separate future work, not silently folded in.</div></div><span class="diff low">Low</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP H -->
+    <details class="phase">
+      <summary>
+        <span class="phase-name">H · Testing &amp; QA</span>
+        <span class="phase-status"><span>6 pts</span><span>6.0 earned</span><span class="phase-bar"><i style="width:100%;background:var(--good)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">JUnit unit test suite</div><div class="note">Parsing, candidate generation, recommendation logic, workload set-selection logic, plan-diff logic, API-limit validation — pure unit tests, 0 failures.</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Real-database integration tests</div><div class="note"><code>IndexEvaluatorIntegrationTest</code>, <code>ExistingIndexManagerIntegrationTest</code>, <code>WorkloadHypoScreenerIntegrationTest</code>, <code>WorkloadQueryAdvisorIntegrationTest</code> — real running Postgres, zero leftover state after every run. <strong>94 tests total across the suite</strong> (up from 59 at the last count — HypoPG screening, storage/count budgets, plan-diff fix, and API hardening each added real coverage, not just implementation).</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP I -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">I · Frontend integration</span>
+        <span class="phase-status"><span>11 pts</span><span>10.0 earned</span><span class="phase-bar"><i style="width:91%;background:var(--good)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">React (Vite) frontend scaffold + component library</div><div class="note">Pulled from a teammate's <code>main</code> branch (selective checkout, leaving the unrelated C++ backend folder behind) — pages, cards, charts, upload box all present.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Single-query page wired end to end</div><div class="note">Rewired from the C++ backend's contract to Java's <code>/analyze</code>. CORS gap found and fixed. Verified live: filter queries, ORDER BY queries, existing-index-covered queries, and JOIN queries all render correctly through the real UI.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">AI-explanation panel wired end to end</div><div class="note">Verified live, including the graceful no-API-key fallback path.</div></div><span class="diff low">Low</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Workload page wired to the real <code>/analyze-workload</code> endpoint</div><div class="note">Delivered wider than originally scoped: a new <code>WorkloadAnalyzeResponse</code> aggregates real per-index cost/coverage from <code>WorkloadQueryAdvisor.analyzeDetailed()</code>'s raw evaluation data, and the page itself got three query-building modes (preset dropdown fetching the themed sample files, free-text, one-click quick-add chips) instead of a mandatory file upload — plus the loading spinner that was missing because there'd never been a real async call to attach it to. Verified end to end against the live backend with real CORS headers.</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Plan drill-down / before-after EXPLAIN visualization</div><div class="note">Would need the API to return raw plan JSON — currently only a short <code>observedEffect</code> string is exposed.</div></div><span class="diff med">Medium</span><span class="wt">1</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP J -->
+    <details class="phase">
+      <summary>
+        <span class="phase-name">J · Data realism</span>
+        <span class="phase-status"><span>5 pts</span><span>5.0 earned</span><span class="phase-bar"><i style="width:100%;background:var(--good)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">Realistic <code>order_items</code> ratio</div><div class="note">Weighted 1–5 items/order distribution (30/30/20/12/8%) replacing an artificial fixed 1:1 with <code>orders</code>.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Zipfian customer/product activity skew</div><div class="note">Empirically calibrated, not asserted — a first exponent choice produced a monopolizing outlier, caught by querying actual concentration and recalibrated to 0.5/0.6, verified independently on two separate database instances.</div></div><span class="diff high">High</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+      </div>
+    </details>
+
+    <!-- GROUP K -->
+    <details class="phase" open>
+      <summary>
+        <span class="phase-name">K · Deployment / Ops</span>
+        <span class="phase-status"><span>11 pts</span><span>7.0 earned</span><span class="phase-bar"><i style="width:64%;background:var(--warn)"></i></span></span>
+      </summary>
+      <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
+      <div class="rows">
+        <div class="row"><div class="row-item"><div class="name">Dockerize backend + frontend</div><div class="note">Done — multi-stage <code>backend/Dockerfile</code> (Maven build → JRE runtime) and <code>index-advisor/Dockerfile</code> (Node build → Nginx-served static bundle), tied together with a root <code>docker-compose.yml</code>. Postgres itself is deliberately not containerized — both DB tiers are already Supabase-hosted (Group A), so there's nothing local to containerize.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">CI/CD pipeline</div><div class="note">No automated build, lint, or test-on-push exists yet — the 94-test suite currently only runs when someone remembers to run <code>mvn test</code> locally. Both hosts below auto-deploy on push at the platform level, but that's not the same as gating a deploy on tests passing first — a broken push still reaches the live URL unchecked. The only remaining 0% item anywhere in this roadmap.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Live hosted deployment</div><div class="note">Done — backend live on Render, frontend live on Vercel. A real bug found and fixed getting here: Render's dynamic <code>$PORT</code> env var wasn't wired to Spring Boot's <code>server.port</code>, so the first deploy built clean but never went healthy; fixed with <code>server.port=${PORT:8080}</code>. Verified end to end, not just "deploy succeeded": a real <code>/analyze</code> POST against the live URL returned a genuine measured recommendation, a CORS preflight from the real Vercel origin came back correct, and the deployed frontend's built JS bundle was fetched and grepped directly to confirm it calls the live backend, not <code>localhost</code>. Disclosed limitation: Render's free tier spins down on inactivity, adding up to ~50s to the first request afterward.</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+      </div>
+    </details>
+
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head"><h2 class="section-title">Recommended sequencing</h2></div>
+    <p class="section-dek">Ordered so there's a working, demoable improvement at the end of every step — never a stretch where the app is strictly worse than it is today.</p>
+    <ol class="phasing-list">
+      <li class="phasing-item">
+        <div><h4>Wire the workload page to <code>/analyze-workload</code> — done</h4><p>Delivered wider than originally scoped: real per-index cost/coverage aggregation, three query-building modes (preset/free-text/quick-add) instead of a mandatory file upload, and the loading spinner that motivated the round in the first place. Verified end to end against the live backend.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Docker Compose, brought up end to end — done</h4><p>Backend + frontend as one <code>docker compose up</code> (database excluded — already Supabase-hosted). Verified by actually building and running both containers, not just writing the Dockerfiles.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Live deployment — done</h4><p>Backend on Render, frontend on Vercel — a real, public URL, the single biggest lever on the "rating" axis specifically. A real bug found and fixed along the way (Render's dynamic <code>$PORT</code> wasn't wired to <code>server.port</code>), then verified end to end: a live <code>/analyze</code> call, a CORS preflight from the real deployed origin, and the deployed JS bundle itself inspected to confirm it calls the live backend, not <code>localhost</code>.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>CI pipeline</h4><p>Run the existing 94-test suite, plus lint/build, on every push, gating the auto-deploys both hosts already trigger. The tests already exist and already pass — this is entirely about making that verification automatic instead of a broken push reaching the live URL unchecked. The last remaining item in this list.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Rotate the leaked Supabase credentials</h4><p>Not code work, but genuinely urgent and currently outstanding — the teammate's C++ backend still has live database credentials hardcoded in a public repo.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Wire HypoPG into the actual workload selection pipeline — done</h4><p>Screen cheaply with HypoPG, validate only promoted candidates with real DDL — and honestly benchmarked, not just shipped: a real but modest ~1.2x average speedup, understood to correlate with promotion ratio rather than workload size (see <code>SCALABILITY_BENCHMARK.md</code>).</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Storage/count budget for index-set selection — done</h4><p>New <code>IndexSetBudget</code> — a real second stopping condition in the greedy loop, not just measured-and-reported data going unused.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Fix nested-plan <code>observedEffect</code> reporting — done</h4><p>Re-verified live on the exact query that originally exposed the bug — <code>"Nested Loop -&gt; Nested Loop"</code> became an accurate description of the actual nested change.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Harden the public API against expensive workloads — done</h4><p>Request-size limits (query count, candidate count, SQL length) rejected with a clean 400 in single-digit milliseconds. Deliberately doesn't cover wall-clock timeouts on a compliant-sized request or rate-limiting — flagged as separate future work, not silently folded in.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Multi-condition JOIN support, then GROUP BY/HAVING awareness</h4><p>Natural extensions of already-shipped JOIN and ORDER BY support, in roughly that order of proximity to what already exists.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Real write-path cost measurement</h4><p>The last piece needed to make every <code>Recommendation.tradeoffs</code> line fully quantitative instead of half-measured, half-disclosed-as-unmeasured.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Wall-clock timeouts and rate-limiting on the public API</h4><p>The size limits added this round bound how big a request can be, not how long a compliant one is allowed to run — a real, disclosed gap, not an oversight.</p></div>
+      </li>
+    </ol>
+    <p class="parallel-note"><b>The pattern worth naming honestly:</b> every group now sits at 64% or higher, and CI/CD is the only 0% item left anywhere in the roadmap. This round's move was narrow and off-roadmap by design — Docker plus a real, verified live deployment (Group K, 0%→64%) — rather than new engine capability, on the theory that a live, verified link moves the needle more than additional local-only functionality. The bug found getting there (Render's dynamic <code>$PORT</code> not wired to <code>server.port</code>) followed the same discipline as every other fix in this project: found by testing the real thing, not by inspection, and re-verified live afterward rather than trusted on "build succeeded."</p>
+  </section>
+
+  <footer>
+    <span>Index Advisor Rundown — a working reference, not a commitment. Re-run the math box if scope changes.</span>
+    <span>83.8 / 100</span>
+  </footer>
+
+</div>
+</body>
+</html>

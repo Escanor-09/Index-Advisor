@@ -46,18 +46,15 @@ function SingleQuery() {
         setResult(null);
 
         try {
-            const response = await axios.post("http://localhost:8080/api/analyze-query", { query: query, });
+            const response = await axios.post(`${import.meta.env.VITE_API_URL}/analyze`, { query: query, });
             setResult(response.data);
             setAiLoading(true);
             setReasoning(["Generating AI explanation...."]);
 
-            axios.post("http://localhost:8080/api/generate-explanation", {
+            axios.post(`${import.meta.env.VITE_API_URL}/generate-explanation`, {
                 query: query,
-                table: response.data.analysis.table,
-                columns: response.data.analysis.filterColumns,
-                beforeCost: response.data.originalCost,
-                afterCost: response.data.bestCost,
-                improvement: response.data.improvement
+                bestIndex: response.data.bestIndex,
+                improvementPercent: response.data.improvement,
             }).then((aiRespnse) => {
                 setReasoning(aiRespnse.data.reasoning);
                 setAiLoading(false);

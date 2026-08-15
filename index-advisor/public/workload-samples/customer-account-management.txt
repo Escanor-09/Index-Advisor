@@ -1,0 +1,69 @@
+-- Theme: Customer Account Management
+-- Queries an account/CRM-style dashboard would run: status/geography
+-- segmentation, signup recency, and a customer's linked orders/payments/
+-- shipping history. Format matches workload/queries.sql exactly (WorkloadReader-
+-- compatible): "--" comment lines are stripped, statements split on ";".
+
+SELECT * FROM customers WHERE status = 'active';
+
+SELECT * FROM customers WHERE status = 'suspended';
+
+SELECT * FROM customers WHERE status = 'inactive';
+
+SELECT * FROM customers WHERE country = 'USA';
+
+SELECT * FROM customers WHERE country = 'India';
+
+SELECT * FROM customers WHERE country = 'UAE';
+
+SELECT * FROM customers WHERE city = 'Mumbai';
+
+SELECT * FROM customers WHERE city = 'New York';
+
+SELECT * FROM customers WHERE state = 'Maharashtra';
+
+SELECT * FROM customers WHERE country = 'India' AND status = 'active';
+
+SELECT * FROM customers WHERE country = 'USA' AND status = 'active';
+
+SELECT * FROM customers WHERE (status = 'suspended' OR status = 'inactive') AND country = 'India';
+
+SELECT * FROM customers WHERE status = 'active' OR status = 'inactive';
+
+SELECT * FROM customers WHERE created_at > '2025-01-01';
+
+SELECT * FROM customers WHERE created_at >= '2025-06-01' AND created_at < '2026-01-01';
+
+SELECT * FROM customers WHERE created_at BETWEEN '2025-01-01' AND '2025-12-31';
+
+SELECT * FROM customers WHERE country IN ('India', 'USA', 'UAE');
+
+SELECT * FROM customers WHERE status IN ('active', 'suspended');
+
+SELECT * FROM customers ORDER BY created_at DESC;
+
+SELECT * FROM customers ORDER BY name;
+
+SELECT * FROM customers WHERE status = 'active' ORDER BY created_at DESC;
+
+SELECT * FROM customers WHERE country = 'India' ORDER BY created_at DESC;
+
+SELECT * FROM customers;
+
+SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id WHERE c.status = 'active';
+
+SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id WHERE c.country = 'USA';
+
+SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id WHERE c.status = 'suspended' AND o.status = 'pending';
+
+SELECT * FROM payments p JOIN customers c ON p.customer_id = c.id WHERE c.status = 'active';
+
+SELECT * FROM payments p JOIN customers c ON p.customer_id = c.id WHERE p.status = 'failed';
+
+SELECT * FROM shipping_addresses s JOIN customers c ON s.customer_id = c.id WHERE c.country = 'India';
+
+SELECT * FROM customers WHERE id = 5000;
+
+SELECT * FROM customers WHERE state = 'Delhi' OR state = 'Maharashtra';
+
+SELECT * FROM customers WHERE country = 'UAE' ORDER BY name;

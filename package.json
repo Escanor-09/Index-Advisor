@@ -1,0 +1,26 @@
+{
+  "name": "index-advisor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "populate:categories": "node src/populate/categories.js",
+    "populate:customers": "node src/populate/customers.js",
+    "populate:products": "node src/populate/products.js",
+    "populate:orders": "node src/populate/orders.js",
+    "populate:order-items": "node src/populate/order-items.js",
+    "populate:payments": "node src/populate/payments.js",
+    "populate:shipping-addresses": "node src/populate/shipping-addresses.js",
+    "populate:all": "npm run populate:categories && npm run populate:customers && npm run populate:products && npm run populate:orders && npm run populate:order-items && npm run populate:payments && npm run populate:shipping-addresses",
+    "verify": "node src/verify-data.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "pg": "^8.23.0"
+  }
+}

@@ -1,0 +1,71 @@
+-- Theme: Order Fulfillment Tracking
+-- Queries a warehouse/fulfillment dashboard would run: order status queues,
+-- amount thresholds, order line items, and shipping-city fulfillment views.
+-- Format matches workload/queries.sql exactly (WorkloadReader-compatible):
+-- "--" comment lines are stripped, statements split on ";".
+
+SELECT * FROM orders WHERE status = 'pending';
+
+SELECT * FROM orders WHERE status = 'processing';
+
+SELECT * FROM orders WHERE status = 'shipped';
+
+SELECT * FROM orders WHERE status = 'delivered';
+
+SELECT * FROM orders WHERE status = 'cancelled';
+
+SELECT * FROM orders WHERE status = 'pending' OR status = 'processing';
+
+SELECT * FROM orders WHERE customer_id = 500;
+
+SELECT * FROM orders WHERE customer_id = 1200 AND status = 'delivered';
+
+SELECT * FROM orders WHERE total_amount > 50000;
+
+SELECT * FROM orders WHERE total_amount BETWEEN 10000 AND 50000;
+
+SELECT * FROM orders WHERE total_amount < 1000;
+
+SELECT * FROM orders WHERE created_at > '2025-01-01';
+
+SELECT * FROM orders WHERE created_at BETWEEN '2025-06-01' AND '2025-12-31';
+
+SELECT * FROM orders WHERE updated_at > '2026-01-01';
+
+SELECT * FROM orders WHERE (status = 'pending' OR status = 'processing') AND total_amount > 20000;
+
+SELECT * FROM orders WHERE status IN ('shipped', 'delivered');
+
+SELECT * FROM orders WHERE shipping_city = 'Mumbai';
+
+SELECT * FROM orders WHERE shipping_city = 'New York';
+
+SELECT * FROM orders WHERE shipping_city = 'Delhi' AND status = 'delivered';
+
+SELECT * FROM orders WHERE status = 'pending' ORDER BY created_at;
+
+SELECT * FROM orders ORDER BY created_at DESC;
+
+SELECT * FROM orders ORDER BY total_amount DESC;
+
+SELECT * FROM orders WHERE status = 'processing' ORDER BY created_at;
+
+SELECT * FROM orders WHERE id = 8000;
+
+SELECT * FROM orders;
+
+SELECT * FROM order_items WHERE order_id = 8000;
+
+SELECT * FROM order_items WHERE product_id = 12000;
+
+SELECT * FROM order_items WHERE quantity > 3;
+
+SELECT * FROM order_items WHERE unit_price > 25000;
+
+SELECT * FROM order_items oi JOIN orders o ON oi.order_id = o.id WHERE o.status = 'pending';
+
+SELECT * FROM order_items oi JOIN orders o ON oi.order_id = o.id WHERE o.status = 'delivered' AND oi.quantity > 2;
+
+SELECT * FROM shipping_addresses s JOIN orders o ON s.order_id = o.id WHERE o.status = 'shipped';
+
+SELECT * FROM shipping_addresses WHERE order_id = 8000;

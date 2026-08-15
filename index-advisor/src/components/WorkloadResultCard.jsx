@@ -26,7 +26,7 @@ function WorkloadResultCard({
 
                 <div className="metric-box">
                     <span className="metric-label">
-                        Original Cost
+                        Avg. Original Time (ms)
                     </span>
 
                     <span className="metric-value">
@@ -36,7 +36,7 @@ function WorkloadResultCard({
 
                 <div className="metric-box">
                     <span className="metric-label">
-                        Optimized Cost
+                        Avg. Optimized Time (ms)
                     </span>
 
                     <span className="metric-value">

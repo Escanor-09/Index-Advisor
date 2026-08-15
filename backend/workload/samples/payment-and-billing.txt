@@ -1,0 +1,72 @@
+-- Theme: Payment and Billing
+-- Queries a finance/billing dashboard would run: payment method/status
+-- reporting, refund and failure investigation, and amount-threshold
+-- reporting across payments and orders.payment_status. Format matches
+-- workload/queries.sql exactly (WorkloadReader-compatible): "--" comment
+-- lines are stripped, statements split on ";".
+
+SELECT * FROM payments WHERE status = 'completed';
+
+SELECT * FROM payments WHERE status = 'failed';
+
+SELECT * FROM payments WHERE status = 'pending';
+
+SELECT * FROM payments WHERE status = 'refunded';
+
+SELECT * FROM payments WHERE method = 'credit_card';
+
+SELECT * FROM payments WHERE method = 'upi';
+
+SELECT * FROM payments WHERE method = 'wallet';
+
+SELECT * FROM payments WHERE method IN ('credit_card', 'debit_card');
+
+SELECT * FROM payments WHERE method = 'net_banking' AND status = 'completed';
+
+SELECT * FROM payments WHERE status = 'failed' OR status = 'refunded';
+
+SELECT * FROM payments WHERE (status = 'failed' OR status = 'pending') AND method = 'credit_card';
+
+SELECT * FROM payments WHERE amount > 30000;
+
+SELECT * FROM payments WHERE amount BETWEEN 5000 AND 20000;
+
+SELECT * FROM payments WHERE amount < 1000;
+
+SELECT * FROM payments WHERE created_at > '2025-06-01';
+
+SELECT * FROM payments WHERE created_at BETWEEN '2025-01-01' AND '2025-06-30';
+
+SELECT * FROM payments WHERE order_id = 8000;
+
+SELECT * FROM payments WHERE customer_id = 500;
+
+SELECT * FROM payments WHERE customer_id = 1200 AND status = 'completed';
+
+SELECT * FROM payments WHERE status = 'completed' ORDER BY created_at DESC;
+
+SELECT * FROM payments ORDER BY amount DESC;
+
+SELECT * FROM payments ORDER BY created_at DESC;
+
+SELECT * FROM payments WHERE method = 'upi' ORDER BY created_at DESC;
+
+SELECT * FROM payments;
+
+SELECT * FROM payments WHERE id = 3000;
+
+SELECT * FROM payments p JOIN orders o ON p.order_id = o.id WHERE o.status = 'delivered';
+
+SELECT * FROM payments p JOIN orders o ON p.order_id = o.id WHERE p.status = 'failed' AND o.status = 'cancelled';
+
+SELECT * FROM payments p JOIN customers c ON p.customer_id = c.id WHERE c.status = 'active' AND p.status = 'completed';
+
+SELECT * FROM orders o JOIN payments p ON o.id = p.order_id WHERE p.method = 'wallet';
+
+SELECT * FROM orders WHERE payment_status = 'paid';
+
+SELECT * FROM orders WHERE payment_status = 'failed';
+
+SELECT * FROM orders WHERE payment_status = 'refunded' OR payment_status = 'failed';
+
+SELECT * FROM orders WHERE payment_status = 'pending' AND status = 'processing';
