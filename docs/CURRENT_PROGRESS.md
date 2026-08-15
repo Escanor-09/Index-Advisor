@@ -6,8 +6,8 @@ What has been built, verified, and what's left. For *why* things are designed th
 
 - **Goal:** analyze SQL queries/workloads and recommend PostgreSQL indexes, using Postgres's own `EXPLAIN ANALYZE` as ground truth instead of a custom cost model.
 - **Stack:** Java 21, Spring Boot 3.5.3, HikariCP-pooled JDBC, JSqlParser 5.3, Jackson, PostgreSQL, HypoPG extension. React (Vite) frontend fully connected — both single-query and workload analysis are live against the real backend.
-- **Completion: 97%** on the original 16-milestone roadmap (milestone-weighted, see Roadmap below) — plus a growing list of off-roadmap priority improvements: quantitative storage cost, connection pooling, a 94-test automated suite, HypoPG-based screening (now genuinely load-bearing in the live workload pipeline, not just a demo), JOIN support, ORDER BY-aware candidates/existing-index awareness/prefix-domination pruning/AI-generated explanations, an explicit storage/count budget for index-set selection, accurate nested-plan-change reporting, and public-API request-size hardening.
-- **Core advisor engine — single-query and workload-level, with JOIN support, HypoPG-screened evaluation, and a real selection budget — is fully built, verified against a real database and a 94-test suite, exposed over a hardened HTTP API, and driving a real frontend for both analysis modes.** Only write-overhead cost modeling remains on the original roadmap; deployment/CI is the largest off-roadmap gap (see `RUNDOWN.html`).
+- **Completion: 97%** on the original 16-milestone roadmap (milestone-weighted, see Roadmap below) — plus a growing list of off-roadmap priority improvements: quantitative storage cost, connection pooling, a 94-test automated suite, HypoPG-based screening (now genuinely load-bearing in the live workload pipeline, not just a demo), JOIN support, ORDER BY-aware candidates/existing-index awareness/prefix-domination pruning/AI-generated explanations, an explicit storage/count budget for index-set selection, accurate nested-plan-change reporting, public-API request-size hardening, and — as of this round — a verified live deployment.
+- **Core advisor engine — single-query and workload-level, with JOIN support, HypoPG-screened evaluation, and a real selection budget — is fully built, verified against a real database and a 94-test suite, exposed over a hardened HTTP API, and driving a real frontend for both analysis modes.** The system is now live: backend on Render, frontend on Vercel, verified end to end. Only write-overhead cost modeling remains on the original roadmap; CI/CD is the largest remaining off-roadmap gap (see `RUNDOWN.html`).
 
 ---
 
@@ -166,8 +166,23 @@ Triggered by two direct observations: no loading spinner ever appeared while a w
 
 **Follow-up fix, same round: quick-add and custom-text queries now append rather than silently dedupe.** The first version's `addQuickQuery`/`addCustomText` both skipped adding a query already present in the list — reasonable-sounding, but wrong for the actual use case: a presenter should be able to click one quick-add chip repeatedly to build up a large workload (e.g. toward 100 queries) without needing that many distinct pre-written buttons. Both functions now plain-append; React's index-based `key`/removal already made this safe (no value-based key collision risk from allowing duplicates).
 
+### Deployment — Docker + Render (backend) + Vercel (frontend) — DONE
+
+Off-roadmap, but the single highest-leverage remaining item per the prior round's assessment (see `RUNDOWN.html`'s Deployment/Ops group). Docker first: a multi-stage `backend/Dockerfile` (Maven build stage → JRE-only runtime stage) and `index-advisor/Dockerfile` (Node build stage → static bundle served by Nginx, `index-advisor/nginx.conf`), tied together with a root `docker-compose.yml` for one-command local startup. Postgres is deliberately not one of the containers — both the canonical and sandbox databases are already Supabase-hosted (see Milestone 0's two-tier architecture), so there's nothing local to containerize there.
+
+**A real bug found and fixed getting the backend live on Render, not just "it deployed":** the build succeeded, but the service never went healthy. Root cause: Render's Docker-based web services must bind to whatever port Render assigns at runtime via the `PORT` environment variable — it's dynamic per-instance, not fixed — and `application.properties` never set `server.port`, so Spring Boot defaulted to 8080 while Render's health check probed a different port entirely. Fixed with `server.port=${PORT:8080}` — the `:8080` fallback keeps local dev and `docker-compose up` completely unaffected.
+
+**Verified end to end after the fix, not just "build succeeded, moving on":**
+- A real `curl -X POST https://index-advisor.onrender.com/analyze` returned a genuine measured recommendation (`orders(customer_id)`, 96.5% improvement) — the live backend actually talking to the real database, not a health-check stub.
+- A CORS preflight (`OPTIONS /analyze` with `Origin: https://index-advisor.vercel.app`) returned `200` with the correct `Access-Control-Allow-Origin` — `CORS_ALLOWED_ORIGIN` was already correctly set on Render.
+- Rather than trust that Vercel's `VITE_API_URL` build-time env var was actually set correctly, the deployed frontend's built JS bundle was fetched directly and grepped for its API calls — confirmed all three endpoints (`/analyze`, `/analyze-workload`, `/generate-explanation`) point at the live Render URL, not `localhost`.
+
+**Known, disclosed limitation:** Render's free tier spins the backend down after inactivity, adding up to ~50 seconds to the first request afterward (visible directly in Render's own dashboard warning) — a real cost of the free tier, not a bug, and not hidden from anyone demoing this live.
+
+**Still open:** no CI/CD. Both Render and Vercel auto-deploy on push at the platform level, but nothing runs the 94-test suite as a gate first — a broken push can still reach the live URL.
+
 ### Not Yet Started
-Milestone 16 (index cost/storage/write-overhead modeling — partially informed by the "quantify tradeoffs" future improvement below).
+Milestone 16 (index cost/storage/write-overhead modeling — partially informed by the "quantify tradeoffs" future improvement below). Off-roadmap: a CI/CD pipeline (see Deployment, above).
 
 ---
 
@@ -412,8 +427,8 @@ Organized by category. Each is a deliberate scope boundary or accepted trade-off
 - **No logging framework** in application code — `System.out.println` throughout (Spring Boot's own startup/request logging via Logback exists, but isn't used by this project's own classes).
 - **~~No configuration file~~ — partially fixed, Milestone 14.** `application.properties` externalizes the web path's DB config; `Main.java`'s CLI path still reads raw env vars independently — two unreconciled config paths.
 - **~~No hardening against oversized/expensive requests~~ — added.** `ApiLimits` bounds query count (200), generated candidates (150), and per-query SQL length (5,000 chars) on the public API, rejected with a clean 400 before any real database work runs — verified live, an oversized request rejected in 9ms. **Still a real, disclosed gap:** this bounds request *size*, not request *duration* — a compliant-sized workload can still legitimately take real minutes (see `SCALABILITY_BENCHMARK.md`), and there's no wall-clock timeout, async cancellation, or rate-limiting yet.
-- **Not containerized, no CI.**
-- **Only tested locally** — no deployment.
+- **~~Not containerized~~ — fixed.** `docker-compose.yml` + a `Dockerfile` per service; the database isn't containerized because it's already Supabase-hosted (nothing local to containerize).
+- **~~Only tested locally, no deployment~~ — fixed.** Live at [index-advisor.vercel.app](https://index-advisor.vercel.app) (frontend) and [index-advisor.onrender.com](https://index-advisor.onrender.com) (backend), verified end to end — see the new Deployment section above. **No CI still** — deploys are platform-auto-triggered on push, not gated on the test suite passing.
 
 ---
 
@@ -462,21 +477,24 @@ From a comparison against a ChatGPT-suggested priority list, re-ranked here by a
 - ~~Storage/count budget as an explicit stopping condition~~ — **done**, `IndexSetBudget`. Not yet exposed on the HTTP request.
 - ~~Fix `Recommendation.observedEffect` for nested plans~~ — **done**, `QueryPlan.describeChange()`, re-verified live on the original bug's exact query.
 - ~~Hardening against oversized/expensive API requests~~ — **done**, `ApiLimits`. Bounds size, not duration — see the disclosed gap above.
+- ~~Docker containerization~~ — **done**, `docker-compose.yml` + per-service `Dockerfile`s.
+- ~~Live deployment~~ — **done.** Backend on Render, frontend on Vercel, verified end to end. Found and fixed a real bug along the way (Render's dynamic `$PORT` binding) — see the Deployment section above.
 
 ### Next, ranked easy-to-hard
-1. **Scale up the workload.** Extending `queries.sql` (including the 2 join queries currently only tested ad hoc in `Main.java`) is near-zero code effort; bumping dataset size just re-runs existing populate scripts with a higher row count.
-2. **Multi-condition/non-equality JOIN support** — currently only single-condition equi-joins parse; a documented, deliberate scope boundary, not a silent gap.
-3. Selectivity-based composite column ordering (replace alphabetical for filter-only composites).
-4. `GROUP BY`/`HAVING` awareness in `SqlParser`/`CandidateGenerator` (`ORDER BY` now done).
-5. Write-overhead measurement (a real benchmark, not just storage size) to make `Recommendation.tradeoffs` fully quantitative.
-6. Expose `IndexSetBudget` on `AnalyzeWorkloadRequest` — the engine capability exists, the HTTP request shape doesn't carry it yet.
-7. Wall-clock timeouts / async cancellation and rate-limiting on the public API — `ApiLimits` bounds request size, not how long a compliant request is allowed to run.
-8. Logging framework, unify `Main.java`'s config with `application.properties`, containerize, add CI.
+1. **CI/CD pipeline.** The 94-test suite already exists and already passes locally; both hosting platforms already auto-deploy on push — this is entirely about making test-then-deploy automatic instead of a broken push reaching the live URL unchecked.
+2. **Scale up the workload.** Extending `queries.sql` (including the 2 join queries currently only tested ad hoc in `Main.java`) is near-zero code effort; bumping dataset size just re-runs existing populate scripts with a higher row count.
+3. **Multi-condition/non-equality JOIN support** — currently only single-condition equi-joins parse; a documented, deliberate scope boundary, not a silent gap.
+4. Selectivity-based composite column ordering (replace alphabetical for filter-only composites).
+5. `GROUP BY`/`HAVING` awareness in `SqlParser`/`CandidateGenerator` (`ORDER BY` now done).
+6. Write-overhead measurement (a real benchmark, not just storage size) to make `Recommendation.tradeoffs` fully quantitative.
+7. Expose `IndexSetBudget` on `AnalyzeWorkloadRequest` — the engine capability exists, the HTTP request shape doesn't carry it yet.
+8. Wall-clock timeouts / async cancellation and rate-limiting on the public API — `ApiLimits` bounds request size, not how long a compliant request is allowed to run.
+9. Logging framework, unify `Main.java`'s config with `application.properties`.
 
 ---
 
 ## Immediate Next Task
 
-**Deployment.** Both frontend and backend are now fully live and demo-ready locally (single-query and workload analysis, spinner-covered async calls, a preset/custom/quick-add workflow that needs no manual file handling), the workload pipeline is HypoPG-screened and budget-aware, and the public API rejects oversized requests before doing real work. What's left is write-overhead cost measurement (the one piece of the original roadmap not yet started) plus the off-roadmap Deployment/Ops work already tracked in `RUNDOWN.html` (Docker, CI, a real hosted URL) — no functional gaps remain in either analysis mode, and engine maturity is no longer the limiting factor.
+**CI/CD.** The system is now genuinely live — [index-advisor.vercel.app](https://index-advisor.vercel.app) (frontend) talking to [index-advisor.onrender.com](https://index-advisor.onrender.com) (backend), both single-query and workload analysis verified end to end against the real deployed stack, not just locally. What's left off the original roadmap is write-overhead cost measurement, and off-roadmap, the one remaining Deployment/Ops gap: no automated build/test/deploy pipeline. Both hosts already auto-deploy on push, but nothing gates that on the 94-test suite passing first — a broken push can reach the live URL unchecked. No functional gaps remain in either analysis mode, and engine maturity is no longer the limiting factor.
 
 Also outstanding, not urgent but real: **rotate the Supabase credentials** hardcoded in the teammate's `Server.cpp` (now public on GitHub) — a project-owner action, not something done from this session.

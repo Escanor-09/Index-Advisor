@@ -3,8 +3,8 @@
 ## 5/5 ROI — Highest Priority
 
 - Complete the React frontend and make the complete system usable end-to-end.
-- Complete Docker containerization for the frontend, backend, and database environment.
-- Add CI/CD with automated build, test, integration-test, and deployment pipelines.
+- ~~Complete Docker containerization for the frontend, backend, and database environment.~~ **Done** — `Dockerfile`s for both services + `docker-compose.yml`; the database itself is intentionally not containerized since both DB tiers are already Supabase-hosted.
+- Add CI/CD with automated build, test, integration-test, and deployment pipelines. **Still open** — both hosts auto-deploy on push at the platform level, but nothing gates that on the existing 94-test suite passing first.
 - Wire HypoPG into the actual workload-selection pipeline as a screen-then-real-validation architecture.
 - Add a quantitative index-cost model combining measured performance benefit, storage cost, and write-maintenance cost.
 - Measure INSERT, UPDATE, and DELETE overhead caused by candidate indexes.
@@ -68,7 +68,7 @@
 - Add a frontend dashboard showing workload statistics, candidate counts, evaluation times, and recommendation quality.
 - Add interactive execution-plan visualization and deeper before/after plan inspection.
 - Add richer product-description data if text-search indexing is eventually explored.
-- Add automated deployment to a production-like cloud environment.
+- ~~Add automated deployment to a production-like cloud environment.~~ **Done** — backend live on Render, frontend live on Vercel, both auto-deploying on push; verified end-to-end (live `/analyze` call, CORS preflight from the real origin, deployed bundle confirmed pointing at the live backend).
 - Compare the advisor quantitatively against existing index-advisor approaches and tools.
 - Add broader PostgreSQL-version compatibility testing.
 - Add long-running stress tests with very large workloads and databases.
