@@ -521,13 +521,13 @@
   <div class="stats-row">
     <div class="stat-card">
       <span class="stat-label">Complete vs. full vision</span>
-      <span class="stat-num accent">~88%</span>
-      <span class="stat-note">Not asserted — computed from the weighted roadmap table below. Group K (Deployment/Ops) reaches 100% this round — CI/CD closes the last 0% item anywhere in the roadmap. No layer in the entire table is below 70% complete now.</span>
+      <span class="stat-num accent">~87%</span>
+      <span class="stat-note">Not asserted — computed from the weighted roadmap table below. Group K (Deployment/Ops) reaches 95% this round — CI closes the last 0% item, though it's CI only, not a deploy gate yet (disclosed, not hidden). No layer in the entire table is below 70% complete now.</span>
     </div>
     <div class="stat-card">
       <span class="stat-label">Rating, as it sits today</span>
       <span class="stat-num">9.2/10</span>
-      <span class="stat-note">Every push to <code>main</code>/<code>consolidated</code> now runs the real 94-test suite against a real Postgres + HypoPG before anything can be called green — a broken push can no longer silently reach the live URL. Engine maturity, deployment, and the deploy-safety gate are all no longer the gap.</span>
+      <span class="stat-note">Every push to <code>main</code>/<code>consolidated</code> now runs the real 94-test suite against a real Postgres + HypoPG, giving every push a visible pass/fail signal for the first time. Stated plainly: this is CI, not CD yet — Render and Vercel still auto-deploy independently of that result, so a broken push can still reach the live URL. Closing that gap is deliberately deferred, tracked below, not silently skipped.</span>
     </div>
     <div class="stat-card">
       <span class="stat-label">+ scale-up + real-world validation</span>
@@ -587,7 +587,7 @@
     <div class="section-head"><h2 class="section-title">Where the 84% comes from</h2></div>
     <p class="section-dek">Not asserted — computed from the roadmap table below. Each layer is weighted by genuine effort share of the full vision (a production-shaped, demonstrable index advisor), then multiplied by how much of that layer is actually done.</p>
     <div class="math-box">
-      <p class="math-lead">This round closes Group K entirely: a real GitHub Actions pipeline builds a Postgres + HypoPG image from scratch, restores a versioned schema (<code>database/schema.sql</code> — extracted this round, since previously the only schema record was a gitignored data dump), regenerates the real 10,000-row dataset via this project's own populate scripts, and runs the full 94-test suite on every push to <code>main</code>/<code>consolidated</code> — verified by actually building and restoring against a local Docker container before writing the workflow, not written blind. Separately, a real write-overhead benchmark was built and run: after finding and fixing two real measurement biases (page-cache and JIT warm-up asymmetry — the same class of bug already found once on the read side), the honest result is that a single index's write cost is inside the noise floor at this project's current 10,000-row scale — reported as such, not rounded into a false precision. Group K goes from 64% to 100% — the only 0% item anywhere in the roadmap is gone.</p>
+      <p class="math-lead">This round closes Group K entirely: a real GitHub Actions pipeline builds a Postgres + HypoPG image from scratch, restores a versioned schema (<code>database/schema.sql</code> — extracted this round, since previously the only schema record was a gitignored data dump), regenerates the real 10,000-row dataset via this project's own populate scripts, and runs the full 94-test suite on every push to <code>main</code>/<code>consolidated</code> — verified by actually building and restoring against a local Docker container before writing the workflow, not written blind. Separately, a real write-overhead benchmark was built and run: after finding and fixing two real measurement biases (page-cache and JIT warm-up asymmetry — the same class of bug already found once on the read side), the honest result is that a single index's write cost is inside the noise floor at this project's current 10,000-row scale — reported as such, not rounded into a false precision. Group K goes from 64% to 95% — the only 0% item anywhere in the roadmap is gone, though CI isn't yet wired as an actual deploy gate (disclosed below, not hidden), which is the last few points of this group.</p>
       <table class="math-table">
         <thead><tr><th>Layer</th><th class="num-r">Weight&nbsp;/&nbsp;100</th><th class="num-r">Done</th><th class="num-r">Earned</th></tr></thead>
         <tbody>
@@ -601,8 +601,8 @@
           <tr><td>H · Testing &amp; QA</td><td class="num-r">6</td><td class="num-r">100%</td><td class="num-r">6.0</td></tr>
           <tr><td>I · Frontend integration</td><td class="num-r">11</td><td class="num-r">91%</td><td class="num-r">10.0</td></tr>
           <tr><td>J · Data realism</td><td class="num-r">5</td><td class="num-r">100%</td><td class="num-r">5.0</td></tr>
-          <tr><td>K · Deployment / Ops</td><td class="num-r">11</td><td class="num-r">100%</td><td class="num-r">11.0</td></tr>
-          <tr class="total"><td>Total</td><td class="num-r">100</td><td class="num-r">—</td><td class="num-r">87.8</td></tr>
+          <tr><td>K · Deployment / Ops</td><td class="num-r">11</td><td class="num-r">95%</td><td class="num-r">10.4</td></tr>
+          <tr class="total"><td>Total</td><td class="num-r">100</td><td class="num-r">—</td><td class="num-r">87.2</td></tr>
         </tbody>
       </table>
     </div>
@@ -782,12 +782,12 @@
     <details class="phase" open>
       <summary>
         <span class="phase-name">K · Deployment / Ops</span>
-        <span class="phase-status"><span>11 pts</span><span>11.0 earned</span><span class="phase-bar"><i style="width:100%;background:var(--good)"></i></span></span>
+        <span class="phase-status"><span>11 pts</span><span>10.4 earned</span><span class="phase-bar"><i style="width:95%;background:var(--good)"></i></span></span>
       </summary>
       <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
       <div class="rows">
         <div class="row"><div class="row-item"><div class="name">Dockerize backend + frontend</div><div class="note">Done — multi-stage <code>backend/Dockerfile</code> (Maven build → JRE runtime) and <code>index-advisor/Dockerfile</code> (Node build → Nginx-served static bundle), tied together with a root <code>docker-compose.yml</code>. Postgres itself is deliberately not containerized — both DB tiers are already Supabase-hosted (Group A), so there's nothing local to containerize. Two disclosed rough edges, neither affecting the live Render/Vercel path: <code>docker-compose.yml</code> expects a <code>backend/.env</code> that isn't in the repo (correctly gitignored), and the frontend <code>Dockerfile</code> never receives <code>VITE_API_URL</code> as a build <code>ARG</code>, so a Docker-built image alone would bake in <code>undefined</code>.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
-        <div class="row"><div class="row-item"><div class="name">CI/CD pipeline</div><div class="note">Done — GitHub Actions (<code>.github/workflows/ci.yml</code>) runs on every push/PR to <code>main</code>/<code>consolidated</code>. Backend job: builds a Postgres 17 + HypoPG image from a checked-in Dockerfile (hypopg isn't in the stock image), restores a newly-extracted <code>database/schema.sql</code> (previously the only schema record was a gitignored data dump — a real reproducibility gap this closed as a side effect), regenerates the real 10,000-row dataset via this project's own <code>npm run populate:all</code> + the 18-point <code>npm run verify</code> integrity check, then runs the full <code>mvn test</code> suite. Frontend job runs <code>npm run build</code>. Verified by actually building and restoring the image/schema/data against a local Docker container before writing the workflow — role creation, schema restore, and the two HypoPG functions this project uses were each individually confirmed working. Disclosed, accepted trade-off: CI regenerates data fresh each run rather than restoring a fixed snapshot, so there's a small amount of run-to-run non-determinism the local dev database doesn't have — low risk given how sparse/selective the generated category distribution naturally is, but not literally zero.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">CI pipeline (not yet a deploy gate)</div><div class="note">GitHub Actions (<code>.github/workflows/ci.yml</code>) runs on every push/PR to <code>main</code>/<code>consolidated</code>. Backend job: builds a Postgres 17 + HypoPG image from a checked-in Dockerfile (hypopg isn't in the stock image), restores a newly-extracted <code>database/schema.sql</code> (previously the only schema record was a gitignored data dump — a real reproducibility gap this closed as a side effect), regenerates the real 10,000-row dataset via this project's own <code>npm run populate:all</code> + the 18-point <code>npm run verify</code> integrity check, then runs the full <code>mvn test</code> suite. Frontend job runs <code>npm run build</code>. Verified by actually building and restoring the image/schema/data against a local Docker container before writing the workflow — role creation, schema restore, and the two HypoPG functions this project uses were each individually confirmed working. Disclosed, accepted trade-off: CI regenerates data fresh each run rather than restoring a fixed snapshot — low risk given how sparse/selective the generated category distribution naturally is, but not literally zero. <b>Stated plainly, not left implied: this is CI, not CD.</b> Render and Vercel each auto-deploy on push independently of this workflow's result — a push that fails CI still deploys; a push that passes still deploys regardless. Wiring an actual deploy gate (disable each platform's git-auto-deploy, trigger a deploy hook only after CI passes) is real, separate work, deliberately deferred rather than assumed done — judged a hardening step, not MVP-blocking, for a two-person project.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:85%;background:var(--warn)"></i></div><span class="prog-pct">85%</span></div></div>
         <div class="row"><div class="row-item"><div class="name">Live hosted deployment</div><div class="note">Done — backend live on Render, frontend live on Vercel. A real bug found and fixed getting here: Render's dynamic <code>$PORT</code> env var wasn't wired to Spring Boot's <code>server.port</code>, so the first deploy built clean but never went healthy; fixed with <code>server.port=${PORT:8080}</code>. Verified end to end, not just "deploy succeeded": a real <code>/analyze</code> POST against the live URL returned a genuine measured recommendation, a CORS preflight from the real Vercel origin came back correct, and the deployed frontend's built JS bundle was fetched and grepped directly to confirm it calls the live backend, not <code>localhost</code>. Disclosed limitation: Render's free tier spins down on inactivity, adding up to ~50s to the first request afterward.</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
       </div>
     </details>
@@ -809,7 +809,10 @@
         <div><h4>Live deployment — done</h4><p>Backend on Render, frontend on Vercel — a real, public URL, the single biggest lever on the "rating" axis specifically. A real bug found and fixed along the way (Render's dynamic <code>$PORT</code> wasn't wired to <code>server.port</code>), then verified end to end: a live <code>/analyze</code> call, a CORS preflight from the real deployed origin, and the deployed JS bundle itself inspected to confirm it calls the live backend, not <code>localhost</code>.</p></div>
       </li>
       <li class="phasing-item">
-        <div><h4>CI pipeline — done</h4><p>GitHub Actions runs the real 94-test suite (against a real Postgres + HypoPG, built fresh from a checked-in Dockerfile) and the frontend build on every push/PR. Verified locally end to end before being written, not written blind. Gates both hosts' existing auto-deploy for the first time.</p></div>
+        <div><h4>CI pipeline — done, CI only</h4><p>GitHub Actions runs the real 94-test suite (against a real Postgres + HypoPG, built fresh from a checked-in Dockerfile) and the frontend build on every push/PR. Verified locally end to end before being written, not written blind. Does <em>not</em> gate either host's auto-deploy yet — that's a distinct, deliberately deferred next step, not silently assumed done.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Wire CI as an actual deploy gate</h4><p>Deliberately deferred, not forgotten: disable Render's and Vercel's git-auto-deploy in favor of a deploy hook triggered only after CI passes. Judged a hardening step, not MVP-blocking, for a two-person project where a visible CI pass/fail signal already gives real value on its own.</p></div>
       </li>
       <li class="phasing-item">
         <div><h4>Rotate the leaked Supabase credentials</h4><p>Not code work, but genuinely urgent and currently outstanding — the teammate's C++ backend still has live database credentials hardcoded in a public repo.</p></div>
@@ -847,7 +850,7 @@
 
   <footer>
     <span>Index Advisor Rundown — a working reference, not a commitment. Re-run the math box if scope changes.</span>
-    <span>87.8 / 100</span>
+    <span>87.2 / 100</span>
   </footer>
 
 </div>
