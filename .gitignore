@@ -2,5 +2,6 @@
 node_modules/
 backend/target/
 database/*.sql
+!database/schema.sql
 .DS_Store
 Index-Advisor-main.zip

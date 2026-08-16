@@ -27,7 +27,7 @@ Two Postgres targets, deliberately separate:
                       │ pg_dump / restore
                       ▼
                  LOCAL
-             PostgreSQL (index_advisor)
+             PostgreSQL (ecom_test)
                       │
              ┌────────┴────────┐
           TablePlus       Java Advisor
@@ -37,7 +37,7 @@ Two Postgres targets, deliberately separate:
 
 **Supabase (`ecom`):** shared canonical dataset, collaboration, source of truth for generated data.
 
-**Local (`index_advisor`):** experimentation — `EXPLAIN ANALYZE`, real index creation/deletion, benchmarking. Kept separate specifically so real DDL experiments never touch the shared dataset. This separation is enforced, not just conventional — see Decision #6 below.
+**Local (`ecom_test`):** experimentation — `EXPLAIN ANALYZE`, real index creation/deletion, benchmarking. Kept separate specifically so real DDL experiments never touch the shared dataset. This separation is enforced, not just conventional — see Decision #6 below. Renamed from `index_advisor` on 16 Aug 2026 (see `CURRENT_PROGRESS.md`'s "Local Dev Sync" note) to match the name a teammate's merged commits already expected — earlier mentions of `index_advisor` elsewhere in this doc describe what was true at the time and are historically accurate, not stale.
 
 ---
 
@@ -94,7 +94,7 @@ EXPLAIN JSON shape varies by node type (`Seq Scan` vs `Index Scan` vs `Bitmap He
 `IndexEvaluator` always creates the real index and runs `EXPLAIN ANALYZE` (which actually executes the query), rather than trusting a plain `EXPLAIN` cost estimate against a hypothetical index. Planner estimates depend on fresh statistics and correct cost constants (`random_page_cost`, etc.) — either can be wrong. Real measured execution time is the ground truth the whole project is built around (Core Philosophy). Trade-off: doesn't scale to hundreds of candidates — `HypoPG` (not yet built) is the known fix, deliberately deferred rather than built prematurely.
 
 ### 6. A hard runtime safety check, not developer discipline
-`IndexEvaluator`'s constructor queries `SELECT current_database()` and throws unless it's exactly `index_advisor`. The two-database split (Supabase vs. local) only means anything if something *enforces* it — a comment or README warning isn't enforcement, a runtime check that throws is. Verified in practice, repeatedly: no experimental index was ever left in either database, across Milestones 10, 13, and 14's much larger HTTP-driven test volume.
+`IndexEvaluator`'s constructor queries `SELECT current_database()` and throws unless it's exactly `ecom_test` (renamed from `index_advisor` 16 Aug 2026). The two-database split (Supabase vs. local) only means anything if something *enforces* it — a comment or README warning isn't enforcement, a runtime check that throws is. Verified in practice, repeatedly: no experimental index was ever left in either database, across Milestones 10, 13, and 14's much larger HTTP-driven test volume.
 
 ### 7. Identifiers are quoted and schema-validated before reaching DDL — hardened in Milestone 14
 `IndexEvaluator` builds `"CREATE INDEX " + name + " ON " + table + " (" + columns + ");"` via concatenation — not a stylistic shortcut, JDBC `PreparedStatement` binding (`?`) can only bind *values*, never *identifiers*; there is no parameterized way to write `CREATE INDEX ? ON ?(?)` in any JDBC driver. Before Milestone 14, this was safe only because every identifier originated from `SqlParser`'s parse of internally-generated queries.

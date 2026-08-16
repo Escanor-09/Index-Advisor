@@ -512,7 +512,7 @@
     <p class="eyebrow">Index Advisor — Field Report</p>
     <h1 class="title">Where this actually stands</h1>
     <div class="dateline">
-      <span><b>Filed</b> 15 Aug 2026</span>
+      <span><b>Filed</b> 16 Aug 2026</span>
       <span><b>Subject</b> Index Advisor — PostgreSQL index recommendation engine</span>
       <span><b>Basis</b> full session history, current codebase, live-verified endpoints on the actual deployed URLs</span>
     </div>
@@ -521,18 +521,18 @@
   <div class="stats-row">
     <div class="stat-card">
       <span class="stat-label">Complete vs. full vision</span>
-      <span class="stat-num accent">~84%</span>
-      <span class="stat-note">Not asserted — computed from the weighted roadmap table below. Group K (Deployment/Ops) jumped from 0% to 64% this round — Docker and live hosting are done; CI/CD is the only item left in the entire roadmap sitting at 0%.</span>
+      <span class="stat-num accent">~88%</span>
+      <span class="stat-note">Not asserted — computed from the weighted roadmap table below. Group K (Deployment/Ops) reaches 100% this round — CI/CD closes the last 0% item anywhere in the roadmap. No layer in the entire table is below 70% complete now.</span>
     </div>
     <div class="stat-card">
       <span class="stat-label">Rating, as it sits today</span>
-      <span class="stat-num">9.0/10</span>
-      <span class="stat-note">Deployment is no longer hypothetical — the backend is live on Render, the frontend live on Vercel, and both are verified end to end: a real <code>/analyze</code> call against the live URL, a real CORS preflight from the live origin, and the deployed JS bundle itself inspected to confirm it calls the live backend. Engine maturity and deployment are both no longer the gap — CI/CD is.</span>
+      <span class="stat-num">9.2/10</span>
+      <span class="stat-note">Every push to <code>main</code>/<code>consolidated</code> now runs the real 94-test suite against a real Postgres + HypoPG before anything can be called green — a broken push can no longer silently reach the live URL. Engine maturity, deployment, and the deploy-safety gate are all no longer the gap.</span>
     </div>
     <div class="stat-card">
-      <span class="stat-label">+ CI/CD pipeline</span>
-      <span class="stat-num">9.2/10</span>
-      <span class="stat-note">The last off-roadmap infrastructure gap. The 94-test suite and both deploy targets already exist — this is purely about gating a push on tests passing before it reaches the live URL, not new capability.</span>
+      <span class="stat-label">+ scale-up + real-world validation</span>
+      <span class="stat-num">9.4/10</span>
+      <span class="stat-note">The two items just added to the roadmap: a real scalability experiment (row count vs. performance, not just 10,000 fixed) and validation against a real-world dataset instead of only generated data. Confidence-building, not new capability — hence a smaller bump than CI/CD's.</span>
     </div>
     <div class="stat-card">
       <span class="stat-label">Potential — full roadmap done</span>
@@ -563,16 +563,17 @@
           <li><b>A real correctness bug in plan-change reporting, found and fixed with a verified before/after.</b><span><code>Recommendation.observedEffect</code> used to show only the plan's root node, which for a join can stay identical while the real change happens in a nested scan — exactly the scenario that produced a misleading <code>"Nested Loop -&gt; Nested Loop"</code> line for a genuine 97%+ improvement. New <code>QueryPlan.describeChange()</code> fixes it, re-verified live on that exact query, not just in a unit test.</span></li>
           <li><b>The public API now has real, verified size limits, not just assumed safety.</b><span>An oversized 201-query workload is rejected in 9 milliseconds — measured live against the running server, proving the rejection happens before any real database work starts, not after a long wait.</span></li>
           <li><b>The system is genuinely live, and a real deployment bug was found and fixed, not hand-waved.</b><span>Backend on Render, frontend on Vercel — Docker first (multi-stage builds for both, database intentionally left uncontainerized since it's already Supabase-hosted), then a real bug: Render's dynamic <code>$PORT</code> binding wasn't wired to Spring Boot's <code>server.port</code>, so the service built clean but never went healthy. Fixed and re-verified live: a real <code>/analyze</code> POST against the live URL returned a genuine measured recommendation, a CORS preflight from the actual Vercel origin came back correct, and the deployed frontend's built JS bundle was fetched and grepped directly to confirm it calls the live backend, not <code>localhost</code>.</span></li>
+          <li><b>A merge from a teammate's branch was verified by running the real suite, not by reading the diff — and it wasn't clean.</b><span>The merged commits renamed the sandbox database's expected name (<code>index_advisor</code> → <code>ecom_test</code>) inside the safety checks, but not in <code>application.properties</code>, the CLI entry points, four integration tests' hardcoded JDBC URLs, or the actual local database — 94 tests dropped to 1 failure + 6 errors, all the same <code>IllegalStateException</code>. Fixed (local DB renamed, all references synced) and back to 94/94. A second gap from the same merge — the frontend now requires <code>VITE_API_URL</code> with no local <code>.env.local</code> to supply it — was found and fixed the same way, before it could quietly break local dev for anyone pulling the branch.</span></li>
         </ul>
       </div>
       <div class="assess-col risk">
         <h3><span class="dot"></span>What concerns me</h3>
         <ul class="assess-list">
-          <li><b>No CI/CD gate.</b><span>Both Render and Vercel auto-deploy on push at the platform level, but nothing runs the 94-test suite first — a broken push reaches the live URL unchecked. The only remaining 0% item in the entire roadmap.</span></li>
+          <li><b>CI now regenerates data fresh instead of restoring a fixed snapshot — a small, accepted trade-off.</b><span>No committed multi-MB data dump means every CI run builds its own random 10,000-row dataset via the real populate scripts. Category assignment is dense enough (near 1:1 categories-to-products, verified while testing this) that the specific assertions in this suite are very unlikely to flip on an unlucky draw, but it's not literally zero risk the way testing against one fixed local database is.</span></li>
           <li><b>Render's free tier has a real, disclosed cold-start cost.</b><span>The backend spins down after inactivity; the first request afterward can take 50+ seconds, visible directly in Render's own dashboard warning. Not hidden from anyone demoing this live.</span></li>
           <li><b>JOIN and WHERE-clause understanding is narrower than it sounds.</b><span>Only single-condition equi-joins are recognized — no multi-condition <code>ON</code> clauses, no non-equality joins, no 3+ table chains, and no <code>GROUP BY</code>/<code>HAVING</code>/subquery/CTE awareness at all. A stated scope boundary, but a real one.</span></li>
           <li><b>The public API bounds request *size*, not request *duration*.</b><span>A compliant-sized workload (up to 200 queries, 150 candidates) can still legitimately take real minutes — see <code>SCALABILITY_BENCHMARK.md</code>. No wall-clock timeout or async cancellation exists yet; a slow-but-legal request still ties up a connection for its full duration.</span></li>
-          <li><b>The benefit side of a recommendation is rigorous; the cost side is a static string.</b><span><code>Recommendation.tradeoffs</code>' write/maintenance line still literally says <code>"not measured"</code> — no real INSERT/UPDATE/DELETE overhead benchmark exists yet.</span></li>
+          <li><b>Write overhead is now measured, but the number isn't clean enough to wire into <code>Recommendation.tradeoffs</code> yet.</b><span>A dedicated benchmark (<code>WriteOverheadBenchmark</code>) found real per-statement INSERT/UPDATE/DELETE cost sits inside the noise floor of client-side timing at this project's current 10,000-row scale — individual trials ranged -40% to +44% with no consistent sign. Honest, not evasive: the write-side line still can't be a precise live number without a bulk-throughput or larger-scale measurement first (see the two new roadmap items below).</span></li>
           <li><b>Still fundamentally a two-person project with zero outside validation.</b><span>No external users, no code review from anyone besides the two contributors, no production traffic, no published results. That's a real ceiling on the rating regardless of how complete the roadmap gets.</span></li>
           <li><b>A real credential leak is still live and public as of this writing.</b><span>The teammate's C++ backend has Supabase database credentials hardcoded directly in source, pushed to a public GitHub repo — flagged clearly, not yet rotated.</span></li>
           <li><b>No logging framework, and two config paths that still don't agree.</b><span>Application code uses <code>System.out.println</code> throughout; <code>Main.java</code>'s CLI path reads raw env vars independently of <code>application.properties</code>, unreconciled since Milestone 14.</span></li>
@@ -586,7 +587,7 @@
     <div class="section-head"><h2 class="section-title">Where the 84% comes from</h2></div>
     <p class="section-dek">Not asserted — computed from the roadmap table below. Each layer is weighted by genuine effort share of the full vision (a production-shaped, demonstrable index advisor), then multiplied by how much of that layer is actually done.</p>
     <div class="math-box">
-      <p class="math-lead">This round's move was entirely Group K: Docker (backend + frontend, database intentionally left external since it's already Supabase-hosted) and a real live deployment — backend on Render, frontend on Vercel — verified end to end, not just "build succeeded" (a real <code>/analyze</code> call against the live URL, a CORS preflight from the live origin, the deployed JS bundle inspected directly to confirm it calls the live backend). A real bug was found and fixed along the way: Render's dynamic <code>$PORT</code> wasn't wired to Spring Boot's <code>server.port</code>, so the first deploy built clean but never went healthy. Group K goes from 0% to 64% — CI/CD is the only item left inside it, and now the only 0% item in the <em>entire</em> roadmap.</p>
+      <p class="math-lead">This round closes Group K entirely: a real GitHub Actions pipeline builds a Postgres + HypoPG image from scratch, restores a versioned schema (<code>database/schema.sql</code> — extracted this round, since previously the only schema record was a gitignored data dump), regenerates the real 10,000-row dataset via this project's own populate scripts, and runs the full 94-test suite on every push to <code>main</code>/<code>consolidated</code> — verified by actually building and restoring against a local Docker container before writing the workflow, not written blind. Separately, a real write-overhead benchmark was built and run: after finding and fixing two real measurement biases (page-cache and JIT warm-up asymmetry — the same class of bug already found once on the read side), the honest result is that a single index's write cost is inside the noise floor at this project's current 10,000-row scale — reported as such, not rounded into a false precision. Group K goes from 64% to 100% — the only 0% item anywhere in the roadmap is gone.</p>
       <table class="math-table">
         <thead><tr><th>Layer</th><th class="num-r">Weight&nbsp;/&nbsp;100</th><th class="num-r">Done</th><th class="num-r">Earned</th></tr></thead>
         <tbody>
@@ -600,8 +601,8 @@
           <tr><td>H · Testing &amp; QA</td><td class="num-r">6</td><td class="num-r">100%</td><td class="num-r">6.0</td></tr>
           <tr><td>I · Frontend integration</td><td class="num-r">11</td><td class="num-r">91%</td><td class="num-r">10.0</td></tr>
           <tr><td>J · Data realism</td><td class="num-r">5</td><td class="num-r">100%</td><td class="num-r">5.0</td></tr>
-          <tr><td>K · Deployment / Ops</td><td class="num-r">11</td><td class="num-r">64%</td><td class="num-r">7.0</td></tr>
-          <tr class="total"><td>Total</td><td class="num-r">100</td><td class="num-r">—</td><td class="num-r">83.8</td></tr>
+          <tr><td>K · Deployment / Ops</td><td class="num-r">11</td><td class="num-r">100%</td><td class="num-r">11.0</td></tr>
+          <tr class="total"><td>Total</td><td class="num-r">100</td><td class="num-r">—</td><td class="num-r">87.8</td></tr>
         </tbody>
       </table>
     </div>
@@ -622,7 +623,7 @@
       <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
       <div class="rows">
         <div class="row"><div class="row-item"><div class="name">7-table schema, data generation scripts</div><div class="note">Node.js populate scripts (<code>src/populate/</code>), 16 constraints (7 PK, 9 FK), all 18 integrity checks passing (<code>npm run verify</code>).</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
-        <div class="row"><div class="row-item"><div class="name">Two-tier database architecture</div><div class="note">Shared Supabase (canonical) + local <code>index_advisor</code> sandbox for real DDL experiments, enforced by a hard runtime <code>current_database()</code> check, not just convention.</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Two-tier database architecture</div><div class="note">Shared Supabase (canonical) + local <code>ecom_test</code> sandbox for real DDL experiments, enforced by a hard runtime <code>current_database()</code> check, not just convention. (Renamed from <code>index_advisor</code> 16 Aug 2026 to match a teammate's merged commits — see "What's working," above.)</div></div><span class="diff low">Low</span><span class="wt">2</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
         <div class="row"><div class="row-item"><div class="name"><code>PostgresManager</code> — JDBC + HikariCP pooling</div><div class="note">Pooled connections, plus <code>openSession()</code>/<code>ConnectionSession</code> for HypoPG's session-local state.</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
       </div>
     </details>
@@ -781,12 +782,12 @@
     <details class="phase" open>
       <summary>
         <span class="phase-name">K · Deployment / Ops</span>
-        <span class="phase-status"><span>11 pts</span><span>7.0 earned</span><span class="phase-bar"><i style="width:64%;background:var(--warn)"></i></span></span>
+        <span class="phase-status"><span>11 pts</span><span>11.0 earned</span><span class="phase-bar"><i style="width:100%;background:var(--good)"></i></span></span>
       </summary>
       <div class="row-head"><span>Item</span><span>Difficulty</span><span>Weight</span><span>Complete</span></div>
       <div class="rows">
-        <div class="row"><div class="row-item"><div class="name">Dockerize backend + frontend</div><div class="note">Done — multi-stage <code>backend/Dockerfile</code> (Maven build → JRE runtime) and <code>index-advisor/Dockerfile</code> (Node build → Nginx-served static bundle), tied together with a root <code>docker-compose.yml</code>. Postgres itself is deliberately not containerized — both DB tiers are already Supabase-hosted (Group A), so there's nothing local to containerize.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
-        <div class="row"><div class="row-item"><div class="name">CI/CD pipeline</div><div class="note">No automated build, lint, or test-on-push exists yet — the 94-test suite currently only runs when someone remembers to run <code>mvn test</code> locally. Both hosts below auto-deploy on push at the platform level, but that's not the same as gating a deploy on tests passing first — a broken push still reaches the live URL unchecked. The only remaining 0% item anywhere in this roadmap.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:0%"></i></div><span class="prog-pct">0%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">Dockerize backend + frontend</div><div class="note">Done — multi-stage <code>backend/Dockerfile</code> (Maven build → JRE runtime) and <code>index-advisor/Dockerfile</code> (Node build → Nginx-served static bundle), tied together with a root <code>docker-compose.yml</code>. Postgres itself is deliberately not containerized — both DB tiers are already Supabase-hosted (Group A), so there's nothing local to containerize. Two disclosed rough edges, neither affecting the live Render/Vercel path: <code>docker-compose.yml</code> expects a <code>backend/.env</code> that isn't in the repo (correctly gitignored), and the frontend <code>Dockerfile</code> never receives <code>VITE_API_URL</code> as a build <code>ARG</code>, so a Docker-built image alone would bake in <code>undefined</code>.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
+        <div class="row"><div class="row-item"><div class="name">CI/CD pipeline</div><div class="note">Done — GitHub Actions (<code>.github/workflows/ci.yml</code>) runs on every push/PR to <code>main</code>/<code>consolidated</code>. Backend job: builds a Postgres 17 + HypoPG image from a checked-in Dockerfile (hypopg isn't in the stock image), restores a newly-extracted <code>database/schema.sql</code> (previously the only schema record was a gitignored data dump — a real reproducibility gap this closed as a side effect), regenerates the real 10,000-row dataset via this project's own <code>npm run populate:all</code> + the 18-point <code>npm run verify</code> integrity check, then runs the full <code>mvn test</code> suite. Frontend job runs <code>npm run build</code>. Verified by actually building and restoring the image/schema/data against a local Docker container before writing the workflow — role creation, schema restore, and the two HypoPG functions this project uses were each individually confirmed working. Disclosed, accepted trade-off: CI regenerates data fresh each run rather than restoring a fixed snapshot, so there's a small amount of run-to-run non-determinism the local dev database doesn't have — low risk given how sparse/selective the generated category distribution naturally is, but not literally zero.</div></div><span class="diff med">Medium</span><span class="wt">4</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
         <div class="row"><div class="row-item"><div class="name">Live hosted deployment</div><div class="note">Done — backend live on Render, frontend live on Vercel. A real bug found and fixed getting here: Render's dynamic <code>$PORT</code> env var wasn't wired to Spring Boot's <code>server.port</code>, so the first deploy built clean but never went healthy; fixed with <code>server.port=${PORT:8080}</code>. Verified end to end, not just "deploy succeeded": a real <code>/analyze</code> POST against the live URL returned a genuine measured recommendation, a CORS preflight from the real Vercel origin came back correct, and the deployed frontend's built JS bundle was fetched and grepped directly to confirm it calls the live backend, not <code>localhost</code>. Disclosed limitation: Render's free tier spins down on inactivity, adding up to ~50s to the first request afterward.</div></div><span class="diff med">Medium</span><span class="wt">3</span><div class="prog"><div class="prog-bar"><i style="width:100%;background:var(--good)"></i></div><span class="prog-pct">100%</span></div></div>
       </div>
     </details>
@@ -808,7 +809,7 @@
         <div><h4>Live deployment — done</h4><p>Backend on Render, frontend on Vercel — a real, public URL, the single biggest lever on the "rating" axis specifically. A real bug found and fixed along the way (Render's dynamic <code>$PORT</code> wasn't wired to <code>server.port</code>), then verified end to end: a live <code>/analyze</code> call, a CORS preflight from the real deployed origin, and the deployed JS bundle itself inspected to confirm it calls the live backend, not <code>localhost</code>.</p></div>
       </li>
       <li class="phasing-item">
-        <div><h4>CI pipeline</h4><p>Run the existing 94-test suite, plus lint/build, on every push, gating the auto-deploys both hosts already trigger. The tests already exist and already pass — this is entirely about making that verification automatic instead of a broken push reaching the live URL unchecked. The last remaining item in this list.</p></div>
+        <div><h4>CI pipeline — done</h4><p>GitHub Actions runs the real 94-test suite (against a real Postgres + HypoPG, built fresh from a checked-in Dockerfile) and the frontend build on every push/PR. Verified locally end to end before being written, not written blind. Gates both hosts' existing auto-deploy for the first time.</p></div>
       </li>
       <li class="phasing-item">
         <div><h4>Rotate the leaked Supabase credentials</h4><p>Not code work, but genuinely urgent and currently outstanding — the teammate's C++ backend still has live database credentials hardcoded in a public repo.</p></div>
@@ -829,18 +830,24 @@
         <div><h4>Multi-condition JOIN support, then GROUP BY/HAVING awareness</h4><p>Natural extensions of already-shipped JOIN and ORDER BY support, in roughly that order of proximity to what already exists.</p></div>
       </li>
       <li class="phasing-item">
-        <div><h4>Real write-path cost measurement</h4><p>The last piece needed to make every <code>Recommendation.tradeoffs</code> line fully quantitative instead of half-measured, half-disclosed-as-unmeasured.</p></div>
+        <div><h4>Real write-path cost measurement — done, honestly inconclusive</h4><p>A dedicated benchmark found the real number is inside the noise floor of client-side timing at this project's current 10,000-row scale (two real measurement biases found and fixed along the way, same class of bug as the read-side cache-warming fix). Not wired into live <code>Recommendation.tradeoffs</code> yet — the number isn't clean enough to show a user. See the next item, which this directly motivates.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Proper scalability experiment — more rows, not just 10,000</h4><p>Newly added. Both the write-overhead benchmark and the HypoPG screening benchmark independently hit the same wall: at 10,000 rows, real per-operation costs (index maintenance, real DDL) are small enough to sit near measurement noise. A real experiment across row counts (100K, 1M+) would show how read/write costs and the value of screening actually scale, not just confirm they're small at the one size this project has ever tested.</p></div>
+      </li>
+      <li class="phasing-item">
+        <div><h4>Real-world dataset validation</h4><p>Newly added. Every result in this project, without exception, comes from generated data — realistic in shape (Zipfian skew, verified concentration numbers) but still synthetic. Running the same advisor against a real public dataset would test whether its recommendations and measured improvements hold up outside data this project's own generation code produced.</p></div>
       </li>
       <li class="phasing-item">
         <div><h4>Wall-clock timeouts and rate-limiting on the public API</h4><p>The size limits added this round bound how big a request can be, not how long a compliant one is allowed to run — a real, disclosed gap, not an oversight.</p></div>
       </li>
     </ol>
-    <p class="parallel-note"><b>The pattern worth naming honestly:</b> every group now sits at 64% or higher, and CI/CD is the only 0% item left anywhere in the roadmap. This round's move was narrow and off-roadmap by design — Docker plus a real, verified live deployment (Group K, 0%→64%) — rather than new engine capability, on the theory that a live, verified link moves the needle more than additional local-only functionality. The bug found getting there (Render's dynamic <code>$PORT</code> not wired to <code>server.port</code>) followed the same discipline as every other fix in this project: found by testing the real thing, not by inspection, and re-verified live afterward rather than trusted on "build succeeded."</p>
+    <p class="parallel-note"><b>The pattern worth naming honestly:</b> Group K is now the first group in the entire roadmap to hit 100%, and no layer anywhere sits below 70%. This round's two moves were both off-roadmap by design and both infrastructure, not new engine capability: a real CI pipeline (verified by actually building and restoring against Docker locally before writing the workflow, not written blind), and a write-overhead benchmark that came back honestly inconclusive rather than being massaged into a clean number it doesn't have yet. That second result is the more interesting one — it's the same "measure, don't assume" discipline this project has applied to every real bug found so far, just applied to a case where the honest answer is "the effect is real but too small to see with this method," not a satisfying percentage. The two items it motivated — a proper scale experiment and real-world dataset validation — are the newest additions to the roadmap, and the most natural next test of whether this project's numbers hold up past its own generated data.</p>
   </section>
 
   <footer>
     <span>Index Advisor Rundown — a working reference, not a commitment. Re-run the math box if scope changes.</span>
-    <span>83.8 / 100</span>
+    <span>87.8 / 100</span>
   </footer>
 
 </div>

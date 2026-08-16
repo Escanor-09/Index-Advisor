@@ -15,7 +15,7 @@ import advisor.database.PostgresManager;
 import advisor.recommendation.Recommendation;
 
 /**
- * Requires a real, running local PostgreSQL with the index_advisor database
+ * Requires a real, running local PostgreSQL with the ecom_test database
  * and the hypopg extension enabled — same setup as
  * IndexEvaluatorIntegrationTest, plus `CREATE EXTENSION hypopg;`.
  * Deliberately not mocked: the whole point of this class is proving the
@@ -30,7 +30,7 @@ class WorkloadHypoScreenerIntegrationTest {
     @BeforeAll
     static void connect() {
         String user = System.getProperty("user.name");
-        db = new PostgresManager("jdbc:postgresql://localhost:5432/index_advisor", user, "");
+        db = new PostgresManager("jdbc:postgresql://localhost:5432/ecom_test", user, "");
     }
 
     @AfterAll

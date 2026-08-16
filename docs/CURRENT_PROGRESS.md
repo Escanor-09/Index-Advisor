@@ -14,7 +14,7 @@ What has been built, verified, and what's left. For *why* things are designed th
 ## What's Built
 
 ### Milestone 0 — Database Foundation — DONE
-7 tables (`categories`, `customers`, `products`, `orders`, `order_items`, `payments`, `shipping_addresses`), 10,000 rows in every table except `order_items` (see Data Quality Improvements below — no longer 1:1 with `orders`), 16 constraints (7 PK, 9 FK). Node.js populate scripts in `src/populate/`. All 18 integrity checks pass (`npm run verify`) — row counts, no orphaned FKs, cross-field consistency (`payments.amount` = `orders.total_amount`, etc.), no duplicate emails/IDs, no NULLs in mandatory columns. Two Postgres targets: Supabase `ecom` (shared canonical) and local `index_advisor` (experimentation sandbox, restored from `database/ecom_dump_*.sql`). Known schema gap: no `UNIQUE` constraint on `customers.email` at the DB level (uniqueness only holds because the generator constructs it that way).
+7 tables (`categories`, `customers`, `products`, `orders`, `order_items`, `payments`, `shipping_addresses`), 10,000 rows in every table except `order_items` (see Data Quality Improvements below — no longer 1:1 with `orders`), 16 constraints (7 PK, 9 FK). Node.js populate scripts in `src/populate/`. All 18 integrity checks pass (`npm run verify`) — row counts, no orphaned FKs, cross-field consistency (`payments.amount` = `orders.total_amount`, etc.), no duplicate emails/IDs, no NULLs in mandatory columns. Two Postgres targets: Supabase `ecom` (shared canonical) and local `ecom_test` (experimentation sandbox, restored from `database/ecom_dump_*.sql`; renamed from `index_advisor` on 16 Aug 2026 — see Local Dev Sync, below). Known schema gap: no `UNIQUE` constraint on `customers.email` at the DB level (uniqueness only holds because the generator constructs it that way).
 
 ### Data Quality Improvements (post-JOIN-support) — DONE
 
@@ -64,7 +64,7 @@ Java, final. Checked against an explicit rule (*if Java materially limits the fi
 `CandidateIndex`, `CandidateGenerator`. One single-column candidate per filter column + one full composite if >1 filter column. 9 distinct candidates across the 10-query workload (deduped via `LinkedHashSet`, relying on record structural equality).
 
 ### Milestone 10 — Index Evaluation — DONE (and hardened, see Priority Improvement below)
-`EvaluationResult`, `IndexEvaluator`. Real `EXPLAIN ANALYZE` → `CREATE INDEX` → `EXPLAIN ANALYZE` → `DROP INDEX` cycle. Hard safety check (`current_database() = 'index_advisor'` or throw). Guaranteed cleanup (pre-emptive `DROP INDEX IF EXISTS` + `finally`-block drop). Verified zero leftover indexes after every run, every milestone, without exception.
+`EvaluationResult`, `IndexEvaluator`. Real `EXPLAIN ANALYZE` → `CREATE INDEX` → `EXPLAIN ANALYZE` → `DROP INDEX` cycle. Hard safety check (`current_database() = 'ecom_test'` or throw — renamed from `index_advisor` 16 Aug 2026, see Local Dev Sync below). Guaranteed cleanup (pre-emptive `DROP INDEX IF EXISTS` + `finally`-block drop). Verified zero leftover indexes after every run, every milestone, without exception.
 
 Original result (products, category_id + status): `category_id` alone 92.0% improvement, `status` alone **-6.8%** (honest negative — not selective enough), composite 96.2%.
 
@@ -181,8 +181,43 @@ Off-roadmap, but the single highest-leverage remaining item per the prior round'
 
 **Still open:** no CI/CD. Both Render and Vercel auto-deploy on push at the platform level, but nothing runs the 94-test suite as a gate first — a broken push can still reach the live URL.
 
+### Local Dev Sync (post-merge) — DONE
+
+The Deployment round above landed on a teammate's `consolidated` branch. Pulling it into this branch was a plain fast-forward merge, but merging code across two people's local setups is exactly the kind of change that should be verified by running the real thing, not assumed clean from reading the diff — and it wasn't clean.
+
+**A real regression, caught by `mvn test`, not by reading the diff:** the merged commits renamed the sandbox database's expected name from `index_advisor` to `ecom_test` inside `IndexEvaluator`/`HypoIndexEvaluator`'s safety checks, but `application.properties`'s default, `Main.java`, `WorkloadBenchmark.java`, four integration test files' hardcoded JDBC URLs, and the actual local Postgres database itself were never part of that rename. Result: 94 tests → 1 failure + 6 errors, every error the identical `IllegalStateException: Refusing to run index experiments against database 'index_advisor'... only runs on the 'ecom_test' sandbox copy`. Presented three fix options (rename the local DB, point local dev at a Supabase-hosted `ecom_test`, or leave it to the user); **renaming the local DB was chosen.**
+
+**Fixed:** confirmed zero active connections via `pg_stat_activity`, then `ALTER DATABASE index_advisor RENAME TO ecom_test;`. Updated `application.properties`'s `db.name` default, `Main.java`, `WorkloadBenchmark.java`'s hardcoded JDBC URL, and all four integration test files' JDBC URLs/doc comments to match — plus one stale test assertion string (`IndexEvaluatorIntegrationTest` still expected the old `'index_advisor'` wording in a thrown-message check). Re-ran: **94/94 passing.**
+
+**A second, related gap found and fixed:** the merge also switched `SingleQuery.jsx`/`WorkloadOptimization.jsx` from hardcoded `localhost:8080` URLs to `import.meta.env.VITE_API_URL` (needed for the Vercel deployment), but no local `.env`/`.env.local` file existed for the frontend — every local API call would have resolved to `undefined/analyze`. Fixed by creating `index-advisor/.env.local` (`VITE_API_URL=http://localhost:8080`) — confirmed gitignored via `git check-ignore -v` (matched by the existing `*.local` rule), so it can't be accidentally committed. `npm run build` still clean.
+
+**Two real, disclosed gaps found in the new Docker config, not yet fixed** (left for a deliberate decision rather than silently patched, since it's a teammate's newly-committed config and the right fix might depend on how they want Docker vs. Vercel to differ):
+- `docker-compose.yml` references `env_file: - backend/.env`, which doesn't exist in the repo (correctly gitignored, since it would hold secrets) — `docker-compose up` won't run out of the box without first creating one locally.
+- `index-advisor/Dockerfile` never receives `VITE_API_URL` as a build `ARG`, so a Docker-built frontend image would bake in `undefined` for the API URL. Vercel's own build pipeline sets `VITE_API_URL` independently at build time and is unaffected — this is specifically a `docker-compose`/local-Docker-build gap, not a live-deployment one.
+
+### CI/CD Pipeline — DONE
+
+GitHub Actions (`.github/workflows/ci.yml`), triggered on every push/PR to `main`/`consolidated`. Two jobs, running in parallel:
+
+- **Backend:** builds a Postgres 17 + HypoPG image from a checked-in Dockerfile (`.github/docker/postgres-ci.Dockerfile` — hypopg isn't in the stock `postgres` image, and GitHub Actions service containers can only reference a pre-built registry image, not a local Dockerfile, so this is built as an explicit workflow step instead), starts it, creates a Postgres role matching the runner's own OS user (`$(whoami)`) so the test suite's hardcoded `jdbc:postgresql://localhost:5432/ecom_test` + OS-username + no-password connection works completely unmodified, restores schema, regenerates the real 10,000-row dataset via this project's own `npm run populate:all`, runs the existing 18-point `npm run verify` integrity check, then runs the full `mvn test` suite.
+- **Frontend:** `npm ci && npm run build`.
+
+**A real reproducibility gap found and fixed as a side effect, not the original goal:** there was no versioned schema anywhere in the repo — the only record of table structure lived inside `database/ecom_dump_*.sql`, which is (correctly) gitignored as generated data. Extracted a schema-only `database/schema.sql` via `pg_dump --schema-only` and added a `.gitignore` exception (`!database/schema.sql`) so it's the one dump-family file that *is* versioned. CI restores this schema, then regenerates data through the real populate pipeline rather than committing a multi-MB data dump to git.
+
+**Verified by actually running the recipe locally before writing the workflow, not written blind:** built the custom Postgres+HypoPG image, ran it in Docker, created the matching role, restored `schema.sql` (found and fixed one real bug in this step — a fresh `pg_dump --schema-only` omitted `CREATE SCHEMA public;` that the original full dump had included, so the restore step now creates the schema explicitly rather than depending on the dump to do it), ran `npm run populate:all` end to end (produced 23,848 order_items — matching the ~23,600–23,900 range already documented from real runs), ran `npm run verify` (**18/18 checks passed**), and confirmed the exact two HypoPG functions this project's code calls (`hypopg_create_index`, `hypopg_reset`) both work against the freshly-installed extension.
+
+**Disclosed, accepted trade-off:** CI regenerates data fresh each run instead of restoring a fixed snapshot, so there's a small amount of run-to-run non-determinism the local dev database (populated once, reused forever) doesn't have. Risk is low in practice — verified while building this that category assignment is dense enough (near 1:1 categories-to-products) that any given category is highly selective by construction, which is exactly the property the suite's assertions depend on — but it's not literally zero, unlike testing against one fixed database.
+
+### Write Overhead Benchmark — DONE, honestly inconclusive at current scale
+
+`backend/src/main/java/advisor/WriteOverheadBenchmark.java` — a standalone benchmark (same pattern as `WorkloadBenchmark`), measuring real INSERT/UPDATE/DELETE cost of `products(category_id)` before/after the index exists. Full writeup: `SCALABILITY_BENCHMARK.md`.
+
+**Two real measurement biases found and fixed while building it** — both the same class of bug as `IndexEvaluator.measureStable()`'s already-documented cache-warming fix: (1) `CREATE INDEX`'s own full-table scan warms the page cache asymmetrically between the baseline and indexed measurement phases; (2) JVM JIT compilation reaching steady state only after many invocations meant whichever phase ran second always looked faster, independent of the index. Both fixed (an equivalent warm-up scan before baseline; a 300-iteration JIT warm-up before either phase).
+
+**Honest result, not a clean win:** even after both fixes, real per-statement write cost at this project's 10,000-row scale sits inside the noise floor of client-side JDBC timing — 5 trials of INSERT overhead ranged from -40.3% to +43.9%, sign flipping trial to trial. Aggregate across 5 trials: INSERT -10.3%, UPDATE +4.4%, DELETE +1.9% — all small, none trustworthy as a precise number. The honest, disclosed conclusion: a single narrow index's write-maintenance cost is genuinely small relative to this table's size, not a meaningful trade-off against the 90%+ read-side gains measured throughout this project — but it can't yet be wired into `Recommendation.tradeoffs` as a real per-recommendation number, since the current method can't resolve it cleanly. Directly motivates the new "proper scalability experiment" item below.
+
 ### Not Yet Started
-Milestone 16 (index cost/storage/write-overhead modeling — partially informed by the "quantify tradeoffs" future improvement below). Off-roadmap: a CI/CD pipeline (see Deployment, above).
+Milestone 16's write-overhead measurement now exists (above) but isn't clean enough to wire into live `Recommendation.tradeoffs` yet. Off-roadmap, newly added: a proper scalability experiment across row counts (not just this project's fixed 10,000), and real-world dataset validation — see Future Improvements, below.
 
 ---
 
@@ -278,6 +313,8 @@ backend/
     │       ├── WorkloadBenchmark.java                   standalone entry point (not JUnit) — screened vs. real-only
     │       │                                            pipeline timing across sample workloads; see
     │       │                                            docs/SCALABILITY_BENCHMARK.md
+    │       ├── WriteOverheadBenchmark.java               standalone entry point (not JUnit) — real INSERT/UPDATE/
+    │       │                                            DELETE cost of an index; see docs/SCALABILITY_BENCHMARK.md
     │       ├── QueryAdvisor.java                       single-query orchestrator (Milestone 12); analyzeDetailed()
     │       │                                            exposes parsed query + all results, analyze() wraps it;
     │       │                                            validateSql() rejects empty/oversized queries fast
@@ -369,7 +406,7 @@ backend/
         └── evaluation/IndexEvaluatorIntegrationTest.java       3 tests (real database)
 ```
 
-39 main Java files, 14 test files (94 tests, 0 failures), 1 `pom.xml`, 1 `application.properties`, 1 workload file. Verified via `mvn test` (fast, repeatable), `mvn exec:java` (full CLI demo against the real database), `mvn exec:java -Dexec.mainClass=advisor.WorkloadBenchmark` (scalability benchmark — the `exec.mainClass` property, previously hardcoded, is now overridable), and live `curl` against a real running server.
+44 main Java files (re-counted directly via `find`, not carried over from an earlier round — the prior "39" here had already drifted), 14 test files (94 tests, 0 failures), 1 `pom.xml`, 1 `application.properties`, 1 workload file. Verified via `mvn test` (fast, repeatable), `mvn exec:java` (full CLI demo against the real database), `mvn exec:java -Dexec.mainClass=advisor.WorkloadBenchmark` (scalability benchmark) / `-Dexec.mainClass=advisor.WriteOverheadBenchmark` (write-overhead benchmark — the `exec.mainClass` property, previously hardcoded, is now overridable), and live `curl` against a real running server. A GitHub Actions pipeline (`.github/workflows/ci.yml`) now runs the same `mvn test` against a real Postgres + HypoPG on every push/PR, plus the frontend build.
 
 ```
 index-advisor/                                        React (Vite) frontend, pulled from the repo's main branch
@@ -403,7 +440,7 @@ Organized by category. Each is a deliberate scope boundary or accepted trade-off
 ### Evaluation
 - **~~Real DDL doesn't scale~~ — HypoPG wired into the live selection pipeline.** `WorkloadHypoScreener` screens every candidate via HypoPG first; only promoted candidates pay the real CREATE/DROP INDEX cost. Genuinely load-bearing now, not a standalone demo — and honestly benchmarked, not just claimed: ~1.2x average speedup, ranging from a 10% slowdown (ID-heavy point-lookup workloads, where screening filters almost nothing) to 46%, correlating with promotion ratio rather than workload size. See `SCALABILITY_BENCHMARK.md`.
 - **~~Single-sample timing~~ — fixed, twice.** `measureStable()` (median of 3 + warm-up) plus a same-*full-plan-shape* clamp (not just root node type — that was itself a bug, found via JOIN testing, see Priority Improvements). Verified: the live-observed ~40% cache-warming artifact now measures ~-5.6%, matching the original pre-bug finding; a genuine ~93% join-column improvement that the root-only clamp had been silently discarding is now correctly credited. Residual: still single-machine, single-point-in-time; still no concurrent-load simulation.
-- **No write-path cost measurement.** Benefit side is measured precisely (including real index storage size, added this round); cost side (INSERT/UPDATE/DELETE overhead) isn't measured at all — `Recommendation.tradeoffs`' second line says so explicitly (`"not measured"`) rather than implying otherwise.
+- **~~No write-path cost measurement~~ — measured, honestly inconclusive.** `WriteOverheadBenchmark` found real per-statement INSERT/UPDATE/DELETE overhead sits inside the noise floor of client-side timing at this project's current 10,000-row scale (see Write Overhead Benchmark, above). `Recommendation.tradeoffs`' second line still says `"not measured"` — deliberately not wired to a number that isn't clean enough to show a user yet. A proper scale-up experiment (Future Improvements, below) is what would actually resolve this.
 - **~~`Recommendation.observedEffect` can be misleadingly uninformative for join queries~~ — fixed.** New `QueryPlan.describeChange()` diffs the full before/after node-type sequence, not just the root; for the exact scenario that originally exposed this (`"Nested Loop -> Nested Loop"` when the real change was a nested `Seq Scan -> Index Scan`), the description now correctly says so. Re-verified live on that exact query, not just in a unit test.
 - **Single machine, single point in time** — numbers are reproducible in shape, not exact figures.
 
@@ -428,7 +465,10 @@ Organized by category. Each is a deliberate scope boundary or accepted trade-off
 - **~~No configuration file~~ — partially fixed, Milestone 14.** `application.properties` externalizes the web path's DB config; `Main.java`'s CLI path still reads raw env vars independently — two unreconciled config paths.
 - **~~No hardening against oversized/expensive requests~~ — added.** `ApiLimits` bounds query count (200), generated candidates (150), and per-query SQL length (5,000 chars) on the public API, rejected with a clean 400 before any real database work runs — verified live, an oversized request rejected in 9ms. **Still a real, disclosed gap:** this bounds request *size*, not request *duration* — a compliant-sized workload can still legitimately take real minutes (see `SCALABILITY_BENCHMARK.md`), and there's no wall-clock timeout, async cancellation, or rate-limiting yet.
 - **~~Not containerized~~ — fixed.** `docker-compose.yml` + a `Dockerfile` per service; the database isn't containerized because it's already Supabase-hosted (nothing local to containerize).
-- **~~Only tested locally, no deployment~~ — fixed.** Live at [index-advisor.vercel.app](https://index-advisor.vercel.app) (frontend) and [index-advisor.onrender.com](https://index-advisor.onrender.com) (backend), verified end to end — see the new Deployment section above. **No CI still** — deploys are platform-auto-triggered on push, not gated on the test suite passing.
+- **~~Only tested locally, no deployment~~ — fixed.** Live at [index-advisor.vercel.app](https://index-advisor.vercel.app) (frontend) and [index-advisor.onrender.com](https://index-advisor.onrender.com) (backend), verified end to end — see the new Deployment section above.
+- **~~No CI~~ — fixed.** GitHub Actions runs the real 94-test suite against a real Postgres + HypoPG, plus the frontend build, on every push/PR — see CI/CD Pipeline, above. A broken push can no longer reach the live URL unchecked.
+- **`docker-compose up` doesn't run out of the box.** References `env_file: backend/.env`, which is correctly gitignored but doesn't exist locally — see Local Dev Sync, above. Doesn't affect the live Render/Vercel deployment, which doesn't use `docker-compose`.
+- **A Docker-built frontend image bakes in `undefined` for the API URL.** `index-advisor/Dockerfile` never receives `VITE_API_URL` as a build `ARG` — see Local Dev Sync, above. Vercel's own build (which sets it independently) is unaffected.
 
 ---
 
@@ -451,10 +491,10 @@ Milestone 12  Single-Query Advisor (end-to-end)                 ✓ DONE
 Milestone 13  Workload Advisor (end-to-end)                     ✓ DONE
 Milestone 14  HTTP API (Spring Boot)                             ✓ DONE
 Milestone 15  React Frontend Integration                          ✓ DONE (single-query and workload, both live)
-Milestone 16  Index Cost / Storage / Write-Overhead Modeling       ~PARTIAL (storage budget now real; write-overhead still unmeasured)
+Milestone 16  Index Cost / Storage / Write-Overhead Modeling       ~PARTIAL (storage budget real and used as a selection budget; write-overhead now measured but inconclusive at current scale)
 ```
 
-**Completion: 97%.** Storage cost is now both measured *and* used as an explicit selection budget (`IndexSetBudget`), not just reported — real additional progress on Milestone 16's scope this round. Write-overhead measurement is the one piece of the original roadmap still fully unstarted.
+**Completion: 97%.** Storage cost is both measured *and* used as an explicit selection budget (`IndexSetBudget`), not just reported. Write-overhead is no longer fully unstarted — `WriteOverheadBenchmark` measured it honestly and found the real signal is inside the noise floor at this project's current 10,000-row scale, not yet a number worth wiring into `Recommendation.tradeoffs`. A scale-up experiment (Future Improvements, below) is what would actually close this milestone out.
 
 ---
 
@@ -479,22 +519,23 @@ From a comparison against a ChatGPT-suggested priority list, re-ranked here by a
 - ~~Hardening against oversized/expensive API requests~~ — **done**, `ApiLimits`. Bounds size, not duration — see the disclosed gap above.
 - ~~Docker containerization~~ — **done**, `docker-compose.yml` + per-service `Dockerfile`s.
 - ~~Live deployment~~ — **done.** Backend on Render, frontend on Vercel, verified end to end. Found and fixed a real bug along the way (Render's dynamic `$PORT` binding) — see the Deployment section above.
+- ~~CI/CD pipeline~~ — **done.** GitHub Actions runs the real 94-test suite against a real Postgres + HypoPG, plus the frontend build, on every push/PR. Found and fixed a real reproducibility gap along the way (no versioned schema existed anywhere — see CI/CD Pipeline, above).
+- ~~Write-overhead measurement~~ — **done, honestly inconclusive.** `WriteOverheadBenchmark` found the real per-statement cost is inside the noise floor of client-side timing at this project's current 10,000-row scale, after finding and fixing two real measurement biases along the way. Not yet wired into `Recommendation.tradeoffs` — the number isn't clean enough to show a user. See `SCALABILITY_BENCHMARK.md`.
 
 ### Next, ranked easy-to-hard
-1. **CI/CD pipeline.** The 94-test suite already exists and already passes locally; both hosting platforms already auto-deploy on push — this is entirely about making test-then-deploy automatic instead of a broken push reaching the live URL unchecked.
-2. **Scale up the workload.** Extending `queries.sql` (including the 2 join queries currently only tested ad hoc in `Main.java`) is near-zero code effort; bumping dataset size just re-runs existing populate scripts with a higher row count.
+1. **Proper scalability experiment — more rows, not just 10,000.** Both the write-overhead benchmark and the HypoPG screening benchmark independently concluded the same thing: at 10,000 rows, real per-operation costs are small enough to sit near measurement noise. Testing across row counts (100K, 1M+) would show how costs actually scale instead of just confirming they're small at the one size ever tested — and is what would finally produce a wire-in-able write-overhead number.
+2. **Real-world dataset validation.** Every result in this project comes from generated data — realistic in shape (verified Zipfian concentration numbers) but still synthetic. Running the same advisor against a real public dataset (e.g. an independent e-commerce dataset) would test whether recommendations and measured improvements hold up outside data this project's own generation code produced.
 3. **Multi-condition/non-equality JOIN support** — currently only single-condition equi-joins parse; a documented, deliberate scope boundary, not a silent gap.
 4. Selectivity-based composite column ordering (replace alphabetical for filter-only composites).
 5. `GROUP BY`/`HAVING` awareness in `SqlParser`/`CandidateGenerator` (`ORDER BY` now done).
-6. Write-overhead measurement (a real benchmark, not just storage size) to make `Recommendation.tradeoffs` fully quantitative.
-7. Expose `IndexSetBudget` on `AnalyzeWorkloadRequest` — the engine capability exists, the HTTP request shape doesn't carry it yet.
-8. Wall-clock timeouts / async cancellation and rate-limiting on the public API — `ApiLimits` bounds request size, not how long a compliant request is allowed to run.
-9. Logging framework, unify `Main.java`'s config with `application.properties`.
+6. Expose `IndexSetBudget` on `AnalyzeWorkloadRequest` — the engine capability exists, the HTTP request shape doesn't carry it yet.
+7. Wall-clock timeouts / async cancellation and rate-limiting on the public API — `ApiLimits` bounds request size, not how long a compliant request is allowed to run.
+8. Logging framework, unify `Main.java`'s config with `application.properties`.
 
 ---
 
 ## Immediate Next Task
 
-**CI/CD.** The system is now genuinely live — [index-advisor.vercel.app](https://index-advisor.vercel.app) (frontend) talking to [index-advisor.onrender.com](https://index-advisor.onrender.com) (backend), both single-query and workload analysis verified end to end against the real deployed stack, not just locally. What's left off the original roadmap is write-overhead cost measurement, and off-roadmap, the one remaining Deployment/Ops gap: no automated build/test/deploy pipeline. Both hosts already auto-deploy on push, but nothing gates that on the 94-test suite passing first — a broken push can reach the live URL unchecked. No functional gaps remain in either analysis mode, and engine maturity is no longer the limiting factor.
+**A proper scalability experiment.** The system is now genuinely live and gated — [index-advisor.vercel.app](https://index-advisor.vercel.app) (frontend) talking to [index-advisor.onrender.com](https://index-advisor.onrender.com) (backend), a real CI pipeline running the full 94-test suite against a real Postgres + HypoPG on every push, both single-query and workload analysis verified end to end. No functional gaps remain in either analysis mode, engine maturity is no longer the limiting factor, and deployment is no longer either. What's left is a validation question, not a capability one: every benchmark in this project (HypoPG screening, write overhead) has been run at exactly one scale — 10,000 rows — and both independently found real costs too small to cleanly measure at that size. A row-count-scaling experiment would resolve that, and real-world dataset validation would test whether any of this holds up on data this project didn't generate itself.
 
-Also outstanding, not urgent but real: **rotate the Supabase credentials** hardcoded in the teammate's `Server.cpp` (now public on GitHub) — a project-owner action, not something done from this session.
+Also outstanding, not urgent but real: **rotate the Supabase credentials** hardcoded in the teammate's `Server.cpp` (now public on GitHub) — a project-owner action, not something done from this session. And the two disclosed Docker Compose gaps (`backend/.env` missing, `VITE_API_URL` not passed as a build ARG) from Local Dev Sync, above — small, don't affect the live deployment, still open.

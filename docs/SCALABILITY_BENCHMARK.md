@@ -2,6 +2,8 @@
 
 How workload analysis time scales with workload size, and what real speedup the HypoPG screen-then-validate pipeline (see `CURRENT_PROGRESS.md`, Priority Improvement — HypoPG wiring) actually delivers versus evaluating every candidate with real DDL. Measured, not asserted — this file exists specifically so the numbers below don't get overclaimed from memory later.
 
+Also covers, as of 2026-08-16, the write-overhead benchmark (INSERT/UPDATE/DELETE cost of a recommended index) — see that section below.
+
 ## Tool
 
 `backend/src/main/java/advisor/WorkloadBenchmark.java` — a standalone entry point, not a JUnit test (it takes real minutes by design; running it on every `mvn test` would make the suite unusable). Run it with:
@@ -45,3 +47,41 @@ For each case it: loads a sample workload file (`backend/workload/samples/`), pr
 ## Natural next step this benchmark surfaced, not yet built
 
 Since the promotion ratio is what actually predicts whether screening helps, a reasonable refinement — **not implemented in this pass, flagged here rather than silently deferred** — would be to skip screening outright below some candidate-count threshold, or dynamically fall back to real-only evaluation when a quick sample of the workload suggests most candidates are already point-lookup-shaped. That's real additional engineering (needs its own validation before being trusted), so it's recorded as a finding, not built speculatively on top of an already-large round of changes.
+
+---
+
+# Write Overhead Benchmark
+
+The benefit side of a recommendation has always been measured precisely (real `EXPLAIN ANALYZE` timing, real `pg_relation_size()`); the cost side never was — `Recommendation.tradeoffs`' write/maintenance line has literally said `"not measured"`. This measures the real INSERT/UPDATE/DELETE cost of adding an index, targeting `products(category_id)` — the project's single most-referenced candidate throughout (92–99% read improvement in every prior measurement).
+
+## Tool
+
+`backend/src/main/java/advisor/WriteOverheadBenchmark.java` — a standalone entry point, not a JUnit test, same reasoning as `WorkloadBenchmark`: it creates a real index and runs real DML for the duration of the run, which `mvn test` shouldn't pay for on every build. Run it with:
+
+```bash
+cd backend
+mvn exec:java -Dexec.mainClass=advisor.WriteOverheadBenchmark
+```
+
+Every timed statement runs inside a transaction that is rolled back immediately afterward — real Postgres write-path cost (WAL, B-tree page maintenance) is genuinely paid and measured, but the dataset is left byte-for-byte unchanged afterward (verified: `SELECT count(*) FROM products` is 10,000 before and after every run, zero leftover `bench-temp` rows, zero leftover index). DELETE specifically measures a row inserted moments earlier in the same open transaction, not an existing real product — a real product can be referenced by `order_items`, which would make a real `DELETE` fail on a foreign-key violation rather than measure anything.
+
+## Two real measurement biases found and fixed while building this
+
+Both are the same class of bug already found once before on the read side (`IndexEvaluator.measureStable()`'s cache-warming fix) — worth stating plainly rather than presenting the final numbers as if the first attempt were clean:
+
+1. **Page-cache asymmetry.** `CREATE INDEX` does a full sequential scan of `products`, warming the OS/`shared_buffers` cache. Left uncorrected, the "with index" phase — which always runs *after* `CREATE INDEX` — looked faster purely from that incidental warm-up, not from anything about the index itself. **Fixed** by running an equivalent full-table warm-up scan (`SELECT count(*) FROM products`) before the baseline phase too.
+2. **JIT warm-up asymmetry.** The JVM's JIT compiler only reaches steady state after enough invocations. Since the baseline phase always runs first in wall-clock time, whichever phase ran *second* always looked faster purely from more total JIT-compiled invocations by that point — independent of the index entirely. This bias persisted even after fixing #1 (first attempt showed a suspicious, consistently negative "overhead" of -14% to -45% across 3 runs). **Fixed** with a large (300-iteration) JIT warm-up run once before either phase begins.
+
+## Result: at this scale, real per-statement overhead is inside the noise floor
+
+**2026-08-16, local `ecom_test`, 10,000 rows, 5 trials, median-of-41-measured-runs per trial:**
+
+| Operation | Baseline (µs) | With index (µs) | Overhead |
+|---|---:|---:|---:|
+| INSERT | 97.4 | 87.4 | -10.3% |
+| UPDATE (indexed column) | 76.8 | 80.2 | +4.4% |
+| DELETE | 893.6 | 910.6 | +1.9% |
+
+Per-trial breakdown (why an aggregate alone would be misleading): individual trials ranged from **-40.3% to +43.9%** for INSERT alone, flipping sign trial to trial with no consistent direction. That's not measurement failure — it's an honest result. **A single narrow B-tree index's real per-statement maintenance cost, on a 10,000-row table, is on the order of tens of microseconds — small enough to sit inside the noise floor of client-side JDBC round-trip timing on one local machine.** The qualitative conclusion this supports: for a table at this project's current scale, write overhead from one recommended index is genuinely small, not a meaningful trade-off against the read-side gains (which run 90%+ in the same measurements) — but the *exact* percentage above shouldn't be quoted as a precise fact, since the trial-to-trial variance is larger than the aggregate effect itself.
+
+**What would resolve this cleanly, not yet done:** bulk-throughput measurement (many rows/sec sustained, not one row at a time) and/or a larger table, where real per-row overhead would need to add up to a measurable aggregate rather than getting lost in per-statement noise. This is exactly what the "proper scalability experiment with more rows" item (`CURRENT_PROGRESS.md`'s Future Improvements) would also need to build — the two aren't separate work.

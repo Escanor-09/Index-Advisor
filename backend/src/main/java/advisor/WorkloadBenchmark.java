@@ -62,7 +62,7 @@ public class WorkloadBenchmark {
         );
         System.out.println("-".repeat(110));
 
-        try (PostgresManager db = new PostgresManager("jdbc:postgresql://localhost:5432/index_advisor", user, "")) {
+        try (PostgresManager db = new PostgresManager("jdbc:postgresql://localhost:5432/ecom_test", user, "")) {
             for (BenchmarkCase c : cases) {
                 runCase(db, c);
             }

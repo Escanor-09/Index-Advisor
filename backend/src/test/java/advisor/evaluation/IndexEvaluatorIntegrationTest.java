@@ -14,7 +14,7 @@ import advisor.candidates.CandidateIndex;
 import advisor.database.PostgresManager;
 
 /**
- * Requires a real, running local PostgreSQL with the index_advisor
+ * Requires a real, running local PostgreSQL with the ecom_test
  * database (see docs/CURRENT_PROGRESS.md for setup) — deliberately not
  * mocked, matching this project's whole ethos of measuring against the
  * real thing rather than assuming behavior. Connects with the current OS
@@ -29,7 +29,7 @@ class IndexEvaluatorIntegrationTest {
     @BeforeAll
     static void connect() {
         String user = System.getProperty("user.name");
-        sandboxDb = new PostgresManager("jdbc:postgresql://localhost:5432/index_advisor", user, "");
+        sandboxDb = new PostgresManager("jdbc:postgresql://localhost:5432/ecom_test", user, "");
         wrongDb = new PostgresManager("jdbc:postgresql://localhost:5432/postgres", user, "");
     }
 
@@ -43,7 +43,7 @@ class IndexEvaluatorIntegrationTest {
     void refusesToRunAgainstNonSandboxDatabase() {
         assertThatThrownBy(() -> new IndexEvaluator(wrongDb))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("index_advisor");
+            .hasMessageContaining("ecom_test");
     }
 
     @Test

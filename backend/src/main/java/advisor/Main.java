@@ -26,7 +26,7 @@ public class Main {
 
         String host = env("DB_HOST", "localhost");
         String port = env("DB_PORT", "5432");
-        String dbName = env("DB_NAME", "index_advisor");
+        String dbName = env("DB_NAME", "ecom_test");
         String user = env("DB_USER", System.getProperty("user.name"));
         String password = env("DB_PASSWORD", "");
 

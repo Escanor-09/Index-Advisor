@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main, consolidated]
+  pull_request:
+    branches: [main, consolidated]
+
+jobs:
+  backend-test:
+    name: Backend — build, test (real Postgres + HypoPG)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: index-advisor/package-lock.json
+
+      # Test suite (94 tests, ~40% of them real-database integration tests) hardcodes
+      # jdbc:postgresql://localhost:5432/ecom_test with the OS username and no password —
+      # matching this project's local trust-auth dev setup exactly, on purpose, so this recipe
+      # reproduces that setup rather than touching any Java code for CI's sake.
+      - name: Build Postgres + HypoPG image
+        run: docker build -t pg-hypopg-ci -f .github/docker/postgres-ci.Dockerfile .
+
+      - name: Start Postgres
+        run: |
+          docker run -d --name pg-ci \
+            -p 5432:5432 \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
+            -e POSTGRES_DB=ecom_test \
+            pg-hypopg-ci
+
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            docker exec pg-ci pg_isready -U postgres && exit 0
+            sleep 1
+          done
+          echo "Postgres never became ready" && exit 1
+
+      - name: Create role matching the runner's OS user
+        run: docker exec pg-ci psql -U postgres -d postgres -c "CREATE ROLE \"$(whoami)\" SUPERUSER LOGIN;"
+
+      # database/schema.sql is the project's versioned schema source (extracted via
+      # pg_dump --schema-only — there was previously no committed schema at all, only a
+      # gitignored full data dump). Data is generated fresh via the project's own populate
+      # scripts, the same ones documented as the real way to stand up a database for this
+      # project, rather than committing a multi-MB data dump to git.
+      - name: Create schema
+        run: |
+          docker exec pg-ci psql -U postgres -d ecom_test -c "DROP SCHEMA IF EXISTS public CASCADE;"
+          docker exec pg-ci psql -U postgres -d ecom_test -c "CREATE SCHEMA public;"
+          docker exec -i pg-ci psql -U postgres -d ecom_test < database/schema.sql
+
+      - name: Enable hypopg
+        run: docker exec pg-ci psql -U postgres -d ecom_test -c "CREATE EXTENSION hypopg;"
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Populate data (10,000 rows/table, matching local dev)
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: ecom_test
+        run: DB_USER="$(whoami)" DB_PASSWORD="" npm run populate:all
+
+      - name: Verify data integrity (18-point check)
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: ecom_test
+        run: DB_USER="$(whoami)" DB_PASSWORD="" npm run verify
+
+      - name: mvn test
+        working-directory: backend
+        run: mvn test
+
+      - name: Stop Postgres
+        if: always()
+        run: docker rm -f pg-ci
+
+  frontend-build:
+    name: Frontend — build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: index-advisor/package-lock.json
+
+      - name: npm ci
+        working-directory: index-advisor
+        run: npm ci
+
+      - name: npm run build
+        working-directory: index-advisor
+        run: npm run build

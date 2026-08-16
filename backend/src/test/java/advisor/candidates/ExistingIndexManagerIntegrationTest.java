@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import advisor.database.PostgresManager;
 
 /**
- * Requires a real, running local PostgreSQL with the index_advisor database
+ * Requires a real, running local PostgreSQL with the ecom_test database
  * (see IndexEvaluatorIntegrationTest for the same setup). Creates one real,
  * temporary index to verify pg_indexes is read and parsed correctly, and
  * always drops it — same "leave no index behind" discipline as the rest of
@@ -29,7 +29,7 @@ class ExistingIndexManagerIntegrationTest {
     @BeforeAll
     static void connectAndCreateTempIndex() {
         String user = System.getProperty("user.name");
-        db = new PostgresManager("jdbc:postgresql://localhost:5432/index_advisor", user, "");
+        db = new PostgresManager("jdbc:postgresql://localhost:5432/ecom_test", user, "");
         manager = new ExistingIndexManager(db);
 
         db.executeUpdate("DROP INDEX IF EXISTS " + TEMP_INDEX_NAME + ";");

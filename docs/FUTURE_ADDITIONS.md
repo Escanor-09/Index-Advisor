@@ -4,10 +4,10 @@
 
 - Complete the React frontend and make the complete system usable end-to-end.
 - ~~Complete Docker containerization for the frontend, backend, and database environment.~~ **Done** — `Dockerfile`s for both services + `docker-compose.yml`; the database itself is intentionally not containerized since both DB tiers are already Supabase-hosted.
-- Add CI/CD with automated build, test, integration-test, and deployment pipelines. **Still open** — both hosts auto-deploy on push at the platform level, but nothing gates that on the existing 94-test suite passing first.
+- ~~Add CI/CD with automated build, test, integration-test, and deployment pipelines.~~ **Done** — GitHub Actions (`.github/workflows/ci.yml`) builds a real Postgres + HypoPG image, restores a versioned schema, regenerates the dataset, and runs the full 94-test suite on every push/PR to `main`/`consolidated`; frontend build runs alongside it.
 - Wire HypoPG into the actual workload-selection pipeline as a screen-then-real-validation architecture.
 - Add a quantitative index-cost model combining measured performance benefit, storage cost, and write-maintenance cost.
-- Measure INSERT, UPDATE, and DELETE overhead caused by candidate indexes.
+- ~~Measure INSERT, UPDATE, and DELETE overhead caused by candidate indexes.~~ **Done, honestly inconclusive** — `WriteOverheadBenchmark` (see `SCALABILITY_BENCHMARK.md`) found the real per-statement cost is inside the noise floor of client-side timing at this project's current 10,000-row scale. Not yet wired into live `Recommendation.tradeoffs` — the number isn't clean enough to show a user yet. Directly motivates the scale-up item just below.
 - Add an explicit storage/index-count budget to workload-level index selection.
 - Build a large realistic workload benchmark instead of relying on only 10 hand-written queries.
 - Create multiple workload scenarios representing different days and different access-pattern distributions.

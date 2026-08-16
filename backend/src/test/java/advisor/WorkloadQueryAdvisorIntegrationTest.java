@@ -15,7 +15,7 @@ import advisor.database.PostgresManager;
 import advisor.recommendation.Recommendation;
 
 /**
- * Requires a real, running local PostgreSQL with the index_advisor
+ * Requires a real, running local PostgreSQL with the ecom_test
  * database — same setup as IndexEvaluatorIntegrationTest. The point of
  * this class specifically: prove an oversized request is rejected before
  * WorkloadAdvisor's profiling step ever runs a real EXPLAIN against the
@@ -30,7 +30,7 @@ class WorkloadQueryAdvisorIntegrationTest {
     @BeforeAll
     static void connect() {
         String user = System.getProperty("user.name");
-        db = new PostgresManager("jdbc:postgresql://localhost:5432/index_advisor", user, "");
+        db = new PostgresManager("jdbc:postgresql://localhost:5432/ecom_test", user, "");
     }
 
     @AfterAll
